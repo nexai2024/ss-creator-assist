@@ -1,6 +1,7 @@
 import { BrowserRouter } from 'react-router-dom';
-import { StrictMode } from 'react';
+import { StrictMode, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { ConvexProvider } from 'convex/react';
 import { ConvexAuthProvider } from '@convex-dev/auth/react';
 import * as Sentry from '@sentry/react';
 import App from './App.tsx';
@@ -17,18 +18,29 @@ if (import.meta.env.VITE_SENTRY_DSN) {
   });
 }
 
+const publicEmbed = /^\/(widget|help)\//.test(window.location.pathname);
+
+function AppProviders({ children }: { children: ReactNode }) {
+  if (publicEmbed) {
+    return <ConvexProvider client={convex}>{children}</ConvexProvider>;
+  }
+  return (
+    <ConvexAuthProvider client={convex}>
+      <ToastProvider>
+        <AuthProvider>{children}</AuthProvider>
+      </ToastProvider>
+    </ConvexAuthProvider>
+  );
+}
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ErrorBoundary>
-      <ConvexAuthProvider client={convex}>
+      <AppProviders>
         <BrowserRouter>
-          <ToastProvider>
-            <AuthProvider>
-              <App />
-            </AuthProvider>
-          </ToastProvider>
+          <App />
         </BrowserRouter>
-      </ConvexAuthProvider>
+      </AppProviders>
     </ErrorBoundary>
   </StrictMode>
 );

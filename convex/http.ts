@@ -125,20 +125,39 @@ const stripeWebhook = httpAction(async (ctx, req) => {
   }
   const event = JSON.parse(payload) as {
     type?: string;
-    data?: { object?: { id?: string; metadata?: { tenantId?: string; plan?: string }; amount_total?: number } };
+    data?: {
+      object?: {
+        id?: string;
+        customer?: string | { id?: string };
+        metadata?: { tenantId?: string; plan?: string };
+        amount_total?: number;
+      };
+    };
   };
+  const object = event.data?.object;
+  const customer = typeof object?.customer === "string"
+    ? object.customer
+    : object?.customer?.id;
   if (event.type === "checkout.session.completed") {
-    const session = event.data?.object;
-    const tenantId = session?.metadata?.tenantId;
-    const plan = session?.metadata?.plan;
+    const tenantId = object?.metadata?.tenantId;
+    const plan = object?.metadata?.plan;
     if (tenantId && (plan === "starter" || plan === "growth" || plan === "enterprise")) {
       await ctx.runMutation(internal.billing.applyPaidPlan, {
         tenantId: asTenantId(tenantId),
         plan,
-        stripeSessionId: session?.id ?? "unknown",
-        amount: session?.amount_total,
+        stripeSessionId: object?.id ?? "unknown",
+        amount: object?.amount_total,
+        stripeCustomerId: customer,
       });
     }
+  }
+  if (event.type === "customer.subscription.deleted") {
+    const tenantId = object?.metadata?.tenantId;
+    await ctx.runMutation(internal.billing.applySubscriptionCanceled, {
+      tenantId: tenantId ? asTenantId(tenantId) : undefined,
+      stripeCustomerId: customer,
+      stripeSubscriptionId: object?.id ?? "unknown",
+    });
   }
   return new Response(JSON.stringify({ received: true }), {
     status: 200,

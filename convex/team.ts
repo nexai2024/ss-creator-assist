@@ -93,9 +93,38 @@ export const invite = mutation({
     await ctx.scheduler.runAfter(0, internal.email.send, {
       to: args.email.toLowerCase(),
       subject: "You're invited to MSE Console",
-      html: `<p>You've been invited as ${args.role}.</p><p><a href="${site}/login?invite=${token}&email=${encodeURIComponent(args.email)}">Accept invite</a></p>`,
+      html: `<p>You've been invited as ${args.role}.</p><p><a href="${site}/login?invite=${token}&email=${encodeURIComponent(args.email)}">Accept invite</a></p><p>Already signed in? <a href="${site}/create-workspace?invite=${token}">Join from your account</a>.</p>`,
     });
     return token;
+  },
+});
+
+export const peekInvite = query({
+  args: { token: v.string() },
+  returns: v.union(
+    v.object({
+      email: v.string(),
+      role,
+      tenant_name: v.string(),
+      expires_at: v.number(),
+      used: v.boolean(),
+    }),
+    v.null(),
+  ),
+  handler: async (ctx, args) => {
+    const invite = await ctx.db
+      .query("teamInvites")
+      .withIndex("by_token", (q) => q.eq("token", args.token))
+      .unique();
+    if (!invite) return null;
+    const tenant = await ctx.db.get(invite.tenantId);
+    return {
+      email: invite.email,
+      role: invite.role,
+      tenant_name: tenant?.name ?? "Workspace",
+      expires_at: invite.expiresAt,
+      used: Boolean(invite.usedAt),
+    };
   },
 });
 

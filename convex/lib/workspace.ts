@@ -91,6 +91,11 @@ export async function acceptInviteForUser(
   if (invite.usedAt) throw new Error("Invite already used");
   if (invite.expiresAt < Date.now()) throw new Error("Invite expired");
 
+  const user = await ctx.db.get(userId);
+  if (user?.email && user.email.toLowerCase() !== invite.email.toLowerCase()) {
+    throw new Error(`This invite is for ${invite.email}`);
+  }
+
   const existing = await ctx.db
     .query("tenantMembers")
     .withIndex("by_tenant_and_user", (q) =>

@@ -19,6 +19,7 @@ import {
   Trash2,
   PauseCircle,
   PlayCircle,
+  AlertCircle,
 } from 'lucide-react';
 import type { IntegrationSettings } from '@/types';
 import { useIntegration } from '@/hooks/useIntegrationSettings';
@@ -26,7 +27,7 @@ import { LoadingSpinner, ErrorState, EmptyState } from '@/components/States';
 import { Modal } from '@/components/Modal';
 import { useToast } from '@/components/Toast';
 import { useDebounce } from '@/hooks/useDebounce';
-import { createTicketCurl, ticketApiUrl, widgetSnippet } from '@/lib/public';
+import { createTicketCurl, isLocalAppOrigin, publicAppOrigin, ticketApiUrl, widgetSnippet } from '@/lib/public';
 import { convexSiteUrl } from '@/lib/convex';
 
 type Tab = 'api' | 'widget' | 'webhooks' | 'branding' | 'sso';
@@ -344,11 +345,13 @@ function ApiTab({
 /* --- Widget Tab --- */
 function WidgetTab({ integration, update }: { integration: IntegrationSettings; update: (p: Partial<IntegrationSettings>) => Promise<void> }) {
   const [copied, setCopied] = useState(false);
+  const origin = publicAppOrigin();
   const snippet = widgetSnippet({
-    origin: window.location.origin,
+    origin,
     integrationId: integration.id,
     position: integration.widget_position,
     greeting: integration.widget_greeting ?? 'Hi! How can we help?',
+    color: integration.widget_color,
     name: integration.name,
   });
 
@@ -361,6 +364,14 @@ function WidgetTab({ integration, update }: { integration: IntegrationSettings; 
   return (
     <div className="space-y-5">
       <SectionCard icon={Code2} title="Embed Code" description={`Paste this snippet before the closing </body> tag on the website for "${integration.name}".`}>
+        {isLocalAppOrigin(origin) && (
+          <div className="flex items-start gap-2 p-3 mb-3 rounded-lg bg-warning-50 text-warning-800 text-xs">
+            <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+            <span>
+              This snippet points at {origin}. Another website cannot load localhost. Set VITE_PUBLIC_APP_URL to your public console URL, or test the embed on a local HTML file while this app is running.
+            </span>
+          </div>
+        )}
         <div className="relative">
           <pre className="px-4 py-3.5 rounded-lg bg-neutral-900 text-neutral-200 font-mono text-xs overflow-x-auto scrollbar-thin leading-relaxed">
             {snippet}

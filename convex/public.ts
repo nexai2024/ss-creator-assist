@@ -162,7 +162,7 @@ export const submitTicket = mutation({
 });
 
 export const widgetConfig = query({
-  args: { integrationId: v.id("integrationSettings") },
+  args: { integrationId: v.string() },
   returns: v.union(
     v.object({
       integration_id: v.id("integrationSettings"),
@@ -179,7 +179,9 @@ export const widgetConfig = query({
     v.null(),
   ),
   handler: async (ctx, args) => {
-    const integration = await ctx.db.get(args.integrationId);
+    const integrationId = ctx.db.normalizeId("integrationSettings", args.integrationId);
+    if (!integrationId) return null;
+    const integration = await ctx.db.get(integrationId);
     if (!integration || integration.status === "inactive" || !integration.widgetEnabled) return null;
     const tenant = await ctx.db.get(integration.tenantId);
     if (!tenant) return null;

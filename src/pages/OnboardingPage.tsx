@@ -14,12 +14,13 @@ import {
   Zap,
   Copy,
   ArrowLeft,
+  AlertCircle,
 } from 'lucide-react';
 import type { Tenant, IntegrationSettings } from '@/types';
 import { useIntegrations, PLAN_INTEGRATION_LIMITS } from '@/hooks/useIntegrationSettings';
 import { LoadingSpinner } from '@/components/States';
 import { PlanBadge } from '@/components/Badges';
-import { widgetSnippet } from '@/lib/public';
+import { isLocalAppOrigin, publicAppOrigin, widgetSnippet } from '@/lib/public';
 import { useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import type { Id } from '../../convex/_generated/dataModel';
@@ -205,10 +206,11 @@ export function OnboardingPage({
   const apiKey = newIntegration?.api_key ?? 'mse_live_xxx';
   const widgetSnippetCode = newIntegration
     ? widgetSnippet({
-        origin: window.location.origin,
+        origin: publicAppOrigin(),
         integrationId: newIntegration.id,
         position: form.widget_position,
         greeting: form.widget_greeting,
+        color: form.widget_color,
         name: form.name,
       })
     : '';
@@ -480,6 +482,14 @@ function StepWidget({ form, setForm, widgetSnippet, copied, onCopy }: {
       <div>
         <label className="text-sm font-medium text-neutral-700 mb-2 block">Embed Code</label>
         <p className="text-xs text-neutral-400 mb-3">Paste this snippet before the closing <code className="px-1.5 py-0.5 rounded bg-neutral-100 text-neutral-600 font-mono text-xs">&lt;/body&gt;</code> tag on your website.</p>
+        {isLocalAppOrigin(publicAppOrigin()) && (
+          <div className="flex items-start gap-2 p-3 mb-3 rounded-lg bg-warning-50 text-warning-800 text-xs">
+            <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+            <span>
+              This snippet points at {publicAppOrigin()}. Another website cannot load localhost. Set VITE_PUBLIC_APP_URL to your public console URL, or test the embed on a local HTML file while this app is running.
+            </span>
+          </div>
+        )}
         <div className="relative">
           <pre className="px-4 py-3.5 rounded-lg bg-neutral-900 text-neutral-200 font-mono text-xs overflow-x-auto scrollbar-thin leading-relaxed">
             {widgetSnippet || '<!-- API key will appear after step 1 -->'}

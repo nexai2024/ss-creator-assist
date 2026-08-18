@@ -19,7 +19,10 @@ export function AuthPage() {
   const [loading, setLoading] = useState(false);
 
   if (authLoading) return <FullPageLoader />;
-  if (session) return <Navigate to={tenants.length === 0 ? '/create-workspace' : '/dashboard'} replace />;
+  if (session) {
+    if (inviteToken) return <Navigate to={`/create-workspace?invite=${encodeURIComponent(inviteToken)}`} replace />;
+    return <Navigate to={tenants.length === 0 ? '/create-workspace' : '/dashboard'} replace />;
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -73,7 +76,7 @@ export function AuthPage() {
                 <UserPlus className="w-5 h-5 text-primary-500" />
                 <h2 className="text-lg font-semibold text-neutral-900">Accept Team Invitation</h2>
               </div>
-              <p className="text-sm text-neutral-500 mb-6">Create your account to join the team.</p>
+              <p className="text-sm text-neutral-500 mb-6">Sign in or create your account to join. Already signed in? We will send you to the join page.</p>
             </>
           ) : mode === 'reset' ? (
             <>

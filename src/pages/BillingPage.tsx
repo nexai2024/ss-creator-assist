@@ -19,7 +19,13 @@ export function BillingPage({ tenant }: { tenant: Tenant | null }) {
   const { toast } = useToast();
   const [searchParams] = useSearchParams();
   const [upgrading, setUpgrading] = useState(false);
+  const [portalLoading, setPortalLoading] = useState(false);
   const checkout = useAction(api.billing.createCheckoutSession);
+  const openPortal = useAction(api.billing.createPortalSession);
+  const billing = useQuery(
+    api.billing.checkoutContext,
+    tenant ? { tenantId: tenant.id as Id<'tenants'> } : 'skip',
+  );
   const logs = useQuery(
     api.dashboard.billingAudit,
     tenant ? { tenantId: tenant.id as Id<'tenants'> } : 'skip',
@@ -49,7 +55,20 @@ export function BillingPage({ tenant }: { tenant: Tenant | null }) {
     }
   };
 
+  const handlePortal = async () => {
+    if (!tenant) return;
+    setPortalLoading(true);
+    try {
+      const { url } = await openPortal({ tenantId: tenant.id as Id<'tenants'> });
+      window.location.assign(url);
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Failed to open the billing portal', 'error');
+      setPortalLoading(false);
+    }
+  };
+
   const checkoutStatus = searchParams.get('checkout');
+  const portalStatus = searchParams.get('portal');
 
   if (!tenant) {
     return (
@@ -70,7 +89,7 @@ export function BillingPage({ tenant }: { tenant: Tenant | null }) {
     <div className="space-y-5 animate-fade-in max-w-4xl mx-auto">
       <div>
         <h1 className="text-2xl font-bold text-neutral-900">Billing & Subscription</h1>
-        <p className="text-sm text-neutral-500 mt-1">Checkout runs on Stripe. Your plan updates after the paid webhook.</p>
+        <p className="text-sm text-neutral-500 mt-1">Checkout and the customer portal run on Stripe. Plan and card changes apply after Stripe confirms them.</p>
       </div>
 
       {checkoutStatus === 'success' && (
@@ -81,6 +100,11 @@ export function BillingPage({ tenant }: { tenant: Tenant | null }) {
       {checkoutStatus === 'cancel' && (
         <div className="flex items-start gap-2 p-3 rounded-lg bg-warning-50 text-warning-700 text-sm">
           Checkout was cancelled. No plan change was made.
+        </div>
+      )}
+      {portalStatus === 'return' && (
+        <div className="flex items-start gap-2 p-3 rounded-lg bg-neutral-100 text-neutral-700 text-sm">
+          Returned from the Stripe billing portal. Card and cancellation changes appear after Stripe confirms them.
         </div>
       )}
 
@@ -98,6 +122,16 @@ export function BillingPage({ tenant }: { tenant: Tenant | null }) {
               <span className="text-xs text-neutral-400">Renews on the 1st of each month</span>
             </div>
           </div>
+          <button
+            type="button"
+            onClick={() => void handlePortal()}
+            disabled={!billing?.hasCustomer || portalLoading}
+            className="btn-secondary text-sm"
+            title={billing?.hasCustomer ? 'Update card or cancel in Stripe' : 'Complete a paid checkout first'}
+          >
+            {portalLoading ? <LoadingSpinner size={16} /> : <CreditCard className="w-4 h-4" />}
+            Manage payment method
+          </button>
         </div>
 
         {/* Usage */}
@@ -166,7 +200,7 @@ export function BillingPage({ tenant }: { tenant: Tenant | null }) {
         </div>
         <div className="mt-4 flex items-start gap-2 p-3 rounded-lg bg-warning-50/50 text-warning-700 text-xs">
           <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-          <span>Checkout creates a Stripe subscription. planTier is patched only after the signed checkout.session.completed webhook. Set STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, and SITE_URL on the Convex deployment. Webhook URL: https://YOUR_DEPLOYMENT.convex.site/stripe/webhook</span>
+          <span>Checkout creates a Stripe subscription. After the first paid checkout, use Manage payment method to update the card or cancel without another Checkout session. Enable the Customer portal in the Stripe Dashboard. Webhook URL: https://YOUR_DEPLOYMENT.convex.site/stripe/webhook</span>
         </div>
       </div>
 

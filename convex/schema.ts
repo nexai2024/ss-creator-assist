@@ -22,7 +22,10 @@ export default defineSchema({
     includedMaus: v.number(),
     overageRate: v.number(),
     slaUptime: v.string(),
-  }).index("by_slug", ["slug"]),
+    stripeCustomerId: v.optional(v.string()),
+  })
+    .index("by_slug", ["slug"])
+    .index("by_stripe_customer", ["stripeCustomerId"]),
 
   tenantMembers: defineTable({
     tenantId: v.id("tenants"),

@@ -33,7 +33,7 @@ export function WidgetPage() {
   const { integrationId } = useParams();
   const config = useQuery(
     api.public.widgetConfig,
-    integrationId ? { integrationId: integrationId as Id<'integrationSettings'> } : 'skip',
+    integrationId ? { integrationId } : 'skip',
   ) as WidgetConfig | null | undefined;
   const startMut = useMutation(api.public.startChat);
   const sendMut = useMutation(api.public.sendChatMessage);

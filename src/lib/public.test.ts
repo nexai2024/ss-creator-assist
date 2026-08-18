@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canAddIntegration, createTicketCurl, slugify, ticketApiUrl, widgetSnippet } from './public';
+import { canAddIntegration, createTicketCurl, isLocalAppOrigin, slugify, ticketApiUrl, widgetSnippet } from './public';
 
 describe('slugify', () => {
   it('turns titles into url slugs', () => {
@@ -33,8 +33,17 @@ describe('widgetSnippet', () => {
       greeting: 'Hello',
     });
     expect(html).toContain('/mse-widget.js');
-    expect(html).toContain('int_123');
+    expect(html).toContain('data-integration-id="int_123"');
+    expect(html).toContain('defer');
     expect(html).not.toContain('mse_live_');
+    expect(html).not.toContain('window.MSE_CONFIG');
+  });
+});
+
+describe('isLocalAppOrigin', () => {
+  it('flags localhost console URLs', () => {
+    expect(isLocalAppOrigin('http://localhost:5173')).toBe(true);
+    expect(isLocalAppOrigin('https://app.example.com')).toBe(false);
   });
 });
 

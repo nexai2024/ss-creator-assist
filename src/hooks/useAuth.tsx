@@ -22,6 +22,7 @@ type AuthContextValue = {
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signUp: (email: string, password: string, tenantName: string) => Promise<{ error: string | null }>;
   acceptInvite: (email: string, password: string, token: string) => Promise<{ error: string | null }>;
+  joinInvite: (token: string) => Promise<{ error: string | null }>;
   resetPassword: (email: string) => Promise<{ error: string | null }>;
   updatePassword: (password: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
@@ -150,6 +151,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [authSignIn, acceptInviteMut, waitForAuth]);
 
+  const joinInvite = useCallback(async (token: string) => {
+    try {
+      await acceptInviteMut({ token });
+      return { error: null };
+    } catch (err) {
+      return { error: toError(err) };
+    }
+  }, [acceptInviteMut]);
+
   const resetPassword = useCallback(async (email: string) => {
     try {
       await authSignIn('password', { email, flow: 'reset' });
@@ -195,7 +205,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   return (
     <AuthContext.Provider value={{
       session, user, loading,
-      signIn, signUp, acceptInvite, resetPassword, updatePassword, signOut, createWorkspace,
+      signIn, signUp, acceptInvite, joinInvite, resetPassword, updatePassword, signOut, createWorkspace,
       tenants, activeTenant, setActiveTenant,
       currentRole: membership?.role ?? null,
       currentMembership: membership as TenantMember | null,
