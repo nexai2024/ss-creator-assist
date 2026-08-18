@@ -165,26 +165,6 @@ export type RoutingRule = {
   updated_at: string;
 };
 
-export type PricingExperiment = {
-  id: string;
-  name: string;
-  description: string | null;
-  variant_a_label: string;
-  variant_a_value: string;
-  variant_b_label: string;
-  variant_b_value: string;
-  is_active: boolean;
-  created_at: string;
-};
-
-export type ExperimentAssignment = {
-  id: string;
-  experiment_id: string;
-  session_id: string;
-  variant: 'A' | 'B';
-  created_at: string;
-};
-
 export type ChatbotMessage = {
   id: string;
   conversation_id: string;

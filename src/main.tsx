@@ -18,7 +18,7 @@ if (import.meta.env.VITE_SENTRY_DSN) {
   });
 }
 
-const publicEmbed = /^\/(widget|help)\//.test(window.location.pathname);
+const publicEmbed = /^\/(widget|help|ticket)(\/|$)/.test(window.location.pathname);
 
 function AppProviders({ children }: { children: ReactNode }) {
   if (publicEmbed) {

@@ -12,7 +12,7 @@ export const PAGE_PATHS: Record<PageId, string> = {
   'integration-detail': '/integrations',
   'new-integration': '/integrations/new',
   routing: '/routing',
-  pricing: '/pricing',
+  pricing: '/billing',
   billing: '/billing',
   team: '/team',
   'saved-replies': '/saved-replies',
@@ -37,8 +37,7 @@ export function pageFromPath(pathname: string): PageId {
   if (pathname.startsWith('/integrations/') && pathname !== '/integrations') return 'integration-detail';
   if (pathname.startsWith('/integrations')) return 'integrations';
   if (pathname.startsWith('/routing')) return 'routing';
-  if (pathname.startsWith('/pricing')) return 'pricing';
-  if (pathname.startsWith('/billing')) return 'billing';
+  if (pathname.startsWith('/pricing') || pathname.startsWith('/billing')) return 'billing';
   if (pathname.startsWith('/team')) return 'team';
   if (pathname.startsWith('/saved-replies')) return 'saved-replies';
   if (pathname.startsWith('/solo-settings')) return 'solo-settings';

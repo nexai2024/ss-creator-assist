@@ -4,6 +4,7 @@ import { mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { requireCapability, requireMember, writeAudit } from "./lib/auth";
 import { applyRouting } from "./lib/routing";
+import { notifyTicketCreated, notifyTicketReply } from "./lib/notifyTicket";
 import { classifyTicket, shapeTicket, shapeTicketMessage, slaHours } from "./lib/shape";
 import { paginationResult, ticketMessageValidator, ticketValidator } from "./lib/validators";
 
@@ -84,6 +85,13 @@ export const create = mutation({
       });
     }
     await applyRouting(ctx, args.tenantId, ticketId, args.subject, category, args.priority);
+    await notifyTicketCreated(ctx, {
+      tenantId: args.tenantId,
+      ticketId,
+      email: args.customerEmail,
+      customerName: args.customerName,
+      subject: args.subject,
+    });
     await ctx.scheduler.runAfter(0, internal.webhooks.deliver, {
       tenantId: args.tenantId,
       eventType: "TicketCreated",
@@ -120,10 +128,13 @@ export const addMessage = mutation({
       senderName: args.senderName,
       content: args.content,
     });
-    await ctx.scheduler.runAfter(0, internal.email.send, {
-      to: ticket.customerEmail,
-      subject: `Re: ${ticket.subject}`,
-      html: `<p>${args.senderName} replied to your ticket:</p><blockquote>${args.content}</blockquote>`,
+    await notifyTicketReply(ctx, {
+      tenantId: args.tenantId,
+      ticketId: args.ticketId,
+      email: ticket.customerEmail,
+      senderName: args.senderName,
+      subject: ticket.subject,
+      content: args.content,
     });
     await writeAudit(ctx, {
       tenantId: args.tenantId,

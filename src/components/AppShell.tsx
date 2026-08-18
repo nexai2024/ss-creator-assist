@@ -16,7 +16,6 @@ import {
   User,
   Zap,
   CreditCard,
-  Tag,
   LogOut,
   Users,
   Crown,
@@ -28,7 +27,7 @@ import {
 } from 'lucide-react';
 import type { Tenant, RoleTier } from '@/types';
 import { PlanBadge, StatusBadge } from '@/components/Badges';
-import { ROLE_DISPLAY } from '@/lib/permissions';
+import { canManageBilling, ROLE_DISPLAY } from '@/lib/permissions';
 
 export type PageId = 'dashboard' | 'tickets' | 'chat' | 'knowledge' | 'gdpr' | 'tenants' | 'integrations' | 'integration-detail' | 'new-integration' | 'routing' | 'pricing' | 'billing' | 'team' | 'inbox' | 'saved-replies' | 'solo-settings';
 export type ViewMode = 'tenant' | 'admin';
@@ -49,7 +48,6 @@ const configNavItems: { id: PageId; label: string; icon: typeof LayoutDashboard 
   { id: 'routing', label: 'Routing Rules', icon: Zap },
   { id: 'team', label: 'Team', icon: Users },
   { id: 'billing', label: 'Billing', icon: CreditCard },
-  { id: 'pricing', label: 'Pricing', icon: Tag },
   { id: 'solo-settings', label: 'Solo Settings', icon: Settings },
 ];
 
@@ -99,7 +97,11 @@ export function AppShell({
   const isAdmin = viewMode === 'admin';
 
   const visibleNavItems = navItems.filter((item) => !item.adminOnly || isAdmin);
-  const visibleConfigItems = configNavItems.filter((item) => !(hideTeam && item.id === 'team'));
+  const visibleConfigItems = configNavItems.filter((item) => {
+    if (hideTeam && item.id === 'team') return false;
+    if (item.id === 'billing' && !canManageBilling(currentRole)) return false;
+    return true;
+  });
   const filteredTenants = tenantSearch
     ? tenants.filter((t) => t.name.toLowerCase().includes(tenantSearch.toLowerCase()) || t.id.toLowerCase().includes(tenantSearch.toLowerCase()))
     : tenants;

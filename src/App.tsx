@@ -13,13 +13,13 @@ import { IntegrationsPage } from '@/pages/IntegrationsPage';
 import { IntegrationPage } from '@/pages/IntegrationPage';
 import { OnboardingPage } from '@/pages/OnboardingPage';
 import { RoutingRulesPage } from '@/pages/RoutingRulesPage';
-import { PricingPage } from '@/pages/PricingPage';
 import { BillingPage } from '@/pages/BillingPage';
 import { TeamPage } from '@/pages/TeamPage';
 import { InboxPage } from '@/pages/InboxPage';
 import { SavedRepliesPage } from '@/pages/SavedRepliesPage';
 import { SoloSettingsPage } from '@/pages/SoloSettingsPage';
 import { HelpArticlePage, HelpCenterHomePage, HelpContactPage } from '@/pages/HelpCenterPage';
+import { TicketStatusPage } from '@/pages/TicketStatusPage';
 import { WidgetPage } from '@/pages/WidgetPage';
 import { useAuth } from '@/hooks/useAuth';
 import { FullPageLoader, ErrorState } from '@/components/States';
@@ -255,6 +255,8 @@ export default function App() {
       <Route path="/help/:slug" element={<HelpCenterHomePage />} />
       <Route path="/help/:slug/contact" element={<HelpContactPage />} />
       <Route path="/help/:slug/:articleSlug" element={<HelpArticlePage />} />
+      <Route path="/ticket/:ticketId" element={<TicketStatusPage />} />
+      <Route path="/ticket" element={<TicketStatusPage />} />
       <Route path="/widget/:integrationId" element={<WidgetPage />} />
       <Route path="/login" element={<AuthPage />} />
       <Route path="/create-workspace" element={<CreateWorkspacePage />} />
@@ -271,7 +273,7 @@ export default function App() {
         <Route path="/gdpr" element={<GdprRoute />} />
         <Route path="/tenants" element={<TenantsRoute />} />
         <Route path="/routing" element={<RoutingRoute />} />
-        <Route path="/pricing" element={<PricingPage />} />
+        <Route path="/pricing" element={<Navigate to="/billing" replace />} />
         <Route path="/billing" element={<BillingRoute />} />
         <Route path="/team" element={<TeamRoute />} />
         <Route path="/saved-replies" element={<SavedRepliesRoute />} />

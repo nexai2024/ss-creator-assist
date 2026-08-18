@@ -23,9 +23,11 @@ export default defineSchema({
     overageRate: v.number(),
     slaUptime: v.string(),
     stripeCustomerId: v.optional(v.string()),
+    stripeSubscriptionId: v.optional(v.string()),
   })
     .index("by_slug", ["slug"])
-    .index("by_stripe_customer", ["stripeCustomerId"]),
+    .index("by_stripe_customer", ["stripeCustomerId"])
+    .index("by_stripe_subscription", ["stripeSubscriptionId"]),
 
   tenantMembers: defineTable({
     tenantId: v.id("tenants"),

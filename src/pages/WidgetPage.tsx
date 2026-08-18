@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useParams } from 'react-router-dom';
 import { Send } from 'lucide-react';
 import { LoadingSpinner } from '@/components/States';
+import { ChatShareBody } from '@/components/ChatShareBody';
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import type { Id } from '../../convex/_generated/dataModel';
@@ -57,9 +58,10 @@ export function WidgetPage() {
     if (!integrationId) return;
     const saved = sessionStorage.getItem(SESSION_KEY(integrationId));
     if (saved) {
-      const parsed = JSON.parse(saved) as { conversation_id: string; visitor_token: string };
+      const parsed = JSON.parse(saved) as { conversation_id: string; visitor_token: string; email?: string };
       setConversationId(parsed.conversation_id);
       setVisitorToken(parsed.visitor_token);
+      if (parsed.email) setEmail(parsed.email);
     }
   }, [integrationId]);
 
@@ -87,7 +89,7 @@ export function WidgetPage() {
       });
       setConversationId(started.conversation_id);
       setVisitorToken(started.visitor_token);
-      sessionStorage.setItem(SESSION_KEY(integrationId), JSON.stringify(started));
+      sessionStorage.setItem(SESSION_KEY(integrationId), JSON.stringify({ ...started, email }));
       setDraft('');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not start chat');
@@ -127,7 +129,12 @@ export function WidgetPage() {
             {(messages ?? []).map((m) => (
               <div key={m.id} className={`flex ${m.sender_type === 'end_user' ? 'justify-end' : 'justify-start'}`}>
                 <div className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${m.sender_type === 'end_user' ? 'text-white rounded-br-md' : 'bg-neutral-100 text-neutral-800 rounded-bl-md'}`} style={m.sender_type === 'end_user' ? { background: color } : undefined}>
-                  {m.content}
+                  <ChatShareBody
+                    content={m.content}
+                    inverted={m.sender_type === 'end_user'}
+                    variant="widget"
+                    visitorEmail={email}
+                  />
                 </div>
               </div>
             ))}

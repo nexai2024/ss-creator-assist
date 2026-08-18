@@ -11,10 +11,13 @@ import { LoadingSpinner, EmptyState, ErrorState } from '@/components/States';
 import { useToast } from '@/components/Toast';
 import { useAgents } from '@/hooks/useAgents';
 import { useSavedReplies, useBusinessHours } from '@/hooks/useSolopreneur';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, Link } from 'react-router-dom';
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import type { Id } from '../../convex/_generated/dataModel';
+import { ChatShareBody } from '@/components/ChatShareBody';
+import { Modal } from '@/components/Modal';
+import { encodeChatShare, excerptFrom, type ArticleShare } from '../../convex/lib/chatContent';
 
 type QuickReply = { label: string; text: string };
 
@@ -43,6 +46,8 @@ export function ChatPage({ tenant }: { tenant: Tenant | null; tenants: Tenant[] 
   const [noteInput, setNoteInput] = useState('');
   const [contextTab, setContextTab] = useState<'customer' | 'notes' | 'kb'>('customer');
   const [showSavedReplies, setShowSavedReplies] = useState(false);
+  const [previewArticle, setPreviewArticle] = useState<KbArticle | null>(null);
+  const [sendingArticle, setSendingArticle] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
@@ -116,6 +121,31 @@ export function ChatPage({ tenant }: { tenant: Tenant | null; tenants: Tenant[] 
     setSending(false);
   };
 
+  const handleSendArticle = async (article: KbArticle) => {
+    if (!selectedId || !tenant) return;
+    setSendingArticle(true);
+    try {
+      await sendMut({
+        tenantId: tenant.id as Id<'tenants'>,
+        conversationId: selectedId as Id<'chatConversations'>,
+        senderName: user?.email ?? 'Agent',
+        content: encodeChatShare({
+          kind: 'article',
+          id: article.id,
+          title: article.title,
+          slug: article.slug,
+          tenantSlug: tenant.slug,
+          excerpt: excerptFrom(article.content),
+        } satisfies ArticleShare, 'Here is an article that might help:'),
+      });
+      setPreviewArticle(null);
+      toast('Article sent', 'success');
+    } catch {
+      toast('Failed to send article', 'error');
+    }
+    setSendingArticle(false);
+  };
+
   const handleQuickReply = (text: string) => { setReply(text); setShowQuickReplies(false); };
 
   const handleBotReply = async () => {
@@ -143,7 +173,7 @@ export function ChatPage({ tenant }: { tenant: Tenant | null; tenants: Tenant[] 
         priority,
         reason,
       });
-      toast(`Conversation escalated to ${priority} priority ticket`, 'success');
+      toast('Conversation escalated. A ticket link was sent in chat.', 'success');
       setShowEscalate(false);
       void ticket;
     } catch {
@@ -300,7 +330,7 @@ export function ChatPage({ tenant }: { tenant: Tenant | null; tenants: Tenant[] 
                               <span className="text-xs font-medium text-violet-600">AI Assistant</span>
                             </div>
                           )}
-                          <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
+                          <ChatShareBody content={msg.content} inverted={msg.sender_type === 'agent'} variant="console" />
                         </div>
                         <p className={`text-xs text-neutral-400 mt-1 px-1 ${msg.sender_type === 'agent' ? 'text-right' : ''}`}>
                           {new Date(msg.created_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
@@ -415,7 +445,7 @@ export function ChatPage({ tenant }: { tenant: Tenant | null; tenants: Tenant[] 
                     {linkedTicket && (
                       <div className="pt-3 border-t border-neutral-100">
                         <label className="text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-2 block">Linked Ticket</label>
-                        <div className="p-3 rounded-lg bg-neutral-50 border border-neutral-100">
+                        <Link to={`/tickets/${linkedTicket.id}`} className="block p-3 rounded-lg bg-neutral-50 border border-neutral-100 hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
                           <div className="flex items-center justify-between mb-1">
                             <p className="text-sm font-medium text-neutral-800 truncate">{linkedTicket.subject}</p>
                           </div>
@@ -423,8 +453,8 @@ export function ChatPage({ tenant }: { tenant: Tenant | null; tenants: Tenant[] 
                             <PriorityBadge priority={linkedTicket.priority} />
                             <StatusBadge status={linkedTicket.status} />
                           </div>
-                          <p className="text-xs text-neutral-400 mt-1.5">{linkedTicket.category}</p>
-                        </div>
+                          <p className="text-xs text-primary-600 font-medium mt-1.5">Open ticket</p>
+                        </Link>
                       </div>
                     )}
 
@@ -488,7 +518,7 @@ export function ChatPage({ tenant }: { tenant: Tenant | null; tenants: Tenant[] 
                     ) : (
                       kbSuggestions.map((article) => (
                         <button key={article.id}
-                          onClick={() => { setReply(`Here's an article that might help: "${article.title}"`); toast('Article reference added to message', 'success'); }}
+                          onClick={() => setPreviewArticle(article)}
                           className="w-full text-left p-3 rounded-lg bg-neutral-50 hover:bg-neutral-100 transition-colors group">
                           <div className="flex items-start gap-2">
                             <FileText className="w-4 h-4 text-primary-500 flex-shrink-0 mt-0.5" />
@@ -520,6 +550,23 @@ export function ChatPage({ tenant }: { tenant: Tenant | null; tenants: Tenant[] 
           onClose={() => setShowEscalate(false)}
           onEscalate={handleEscalate}
         />
+      )}
+
+      {previewArticle && (
+        <Modal open onClose={() => setPreviewArticle(null)} title={previewArticle.title} size="lg">
+          <p className="text-sm text-neutral-700 leading-relaxed whitespace-pre-wrap">{previewArticle.content}</p>
+          <div className="flex justify-end gap-2 mt-6">
+            <button type="button" onClick={() => setPreviewArticle(null)} className="btn-secondary">Close</button>
+            <button
+              type="button"
+              disabled={sendingArticle || selected?.status === 'closed'}
+              onClick={() => void handleSendArticle(previewArticle)}
+              className="btn-primary"
+            >
+              {sendingArticle ? 'Sending…' : 'Send to customer'}
+            </button>
+          </div>
+        </Modal>
       )}
     </div>
   );

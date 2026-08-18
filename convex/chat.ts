@@ -2,6 +2,8 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireMember, writeAudit } from "./lib/auth";
 import { classifyTicket, shapeConversation, shapeChatMessage, shapeTicket, slaHours } from "./lib/shape";
+import { encodeChatShare, excerptFrom } from "./lib/chatContent";
+import { notifyTicketCreated } from "./lib/notifyTicket";
 import { chatMessageValidator, conversationValidator, ticketValidator } from "./lib/validators";
 
 export const list = query({
@@ -131,12 +133,20 @@ export const botReply = mutation({
       .query("kbArticles")
       .withIndex("by_tenant_and_status", (q) => q.eq("tenantId", args.tenantId).eq("status", "published"))
       .take(50);
+    const tenant = await ctx.db.get(args.tenantId);
     const needle = args.message.toLowerCase();
     const match = articles.find(
       (a) => a.title.toLowerCase().includes(needle.slice(0, 40)) || a.content.toLowerCase().includes(needle.slice(0, 40)),
     );
-    const content = match
-      ? `I found this article that may help: ${match.title}\n\n${match.content.slice(0, 400)}`
+    const content = match && tenant
+      ? encodeChatShare({
+        kind: "article",
+        id: match._id,
+        title: match.title,
+        slug: match.slug,
+        tenantSlug: tenant.slug,
+        excerpt: excerptFrom(match.content),
+      }, "I found an article that may help:")
       : "I could not find a matching article. An agent will follow up shortly.";
     const id = await ctx.db.insert("chatMessages", {
       conversationId: args.conversationId,
@@ -180,6 +190,26 @@ export const escalate = mutation({
       senderType: "system",
       senderName: "System",
       content: `Escalated from live chat. Reason: ${args.reason}. Conversation ID: ${args.conversationId}`,
+    });
+    await ctx.db.insert("chatMessages", {
+      conversationId: args.conversationId,
+      senderType: "agent",
+      senderName: "System",
+      content: encodeChatShare({
+        kind: "ticket",
+        id: ticketId,
+        subject: `Escalated from chat: ${conv.customerName}`,
+      }, "We've opened a support ticket so a specialist can follow up."),
+    });
+    if (conv.status === "waiting") {
+      await ctx.db.patch(args.conversationId, { status: "active" });
+    }
+    await notifyTicketCreated(ctx, {
+      tenantId: args.tenantId,
+      ticketId,
+      email: conv.customerEmail,
+      customerName: conv.customerName,
+      subject: `Escalated from chat: ${conv.customerName}`,
     });
     await writeAudit(ctx, {
       tenantId: args.tenantId,

@@ -4,6 +4,7 @@ import { auth } from "./auth";
 import { internal } from "./_generated/api";
 import { asTenantId, asTicketId } from "./httpApi";
 import { corsHeaders } from "./lib/cors";
+import { isPlanTier, planFromStripePrice } from "./lib/stripePlans";
 
 function json(body: unknown, status: number, cors: Record<string, string>) {
   return new Response(JSON.stringify(body), {
@@ -129,8 +130,18 @@ const stripeWebhook = httpAction(async (ctx, req) => {
       object?: {
         id?: string;
         customer?: string | { id?: string };
+        subscription?: string | { id?: string };
+        status?: string;
         metadata?: { tenantId?: string; plan?: string };
         amount_total?: number;
+        items?: {
+          data?: Array<{
+            price?: {
+              lookup_key?: string | null;
+              metadata?: { plan?: string };
+            };
+          }>;
+        };
       };
     };
   };
@@ -138,6 +149,9 @@ const stripeWebhook = httpAction(async (ctx, req) => {
   const customer = typeof object?.customer === "string"
     ? object.customer
     : object?.customer?.id;
+  const subscriptionId = typeof object?.subscription === "string"
+    ? object.subscription
+    : object?.subscription?.id;
   if (event.type === "checkout.session.completed") {
     const tenantId = object?.metadata?.tenantId;
     const plan = object?.metadata?.plan;
@@ -148,8 +162,22 @@ const stripeWebhook = httpAction(async (ctx, req) => {
         stripeSessionId: object?.id ?? "unknown",
         amount: object?.amount_total,
         stripeCustomerId: customer,
+        stripeSubscriptionId: subscriptionId,
       });
     }
+  }
+  if (event.type === "customer.subscription.updated" || event.type === "customer.subscription.created") {
+    const tenantId = object?.metadata?.tenantId;
+    const metaPlan = object?.metadata?.plan;
+    const plan = planFromStripePrice(object?.items?.data?.[0]?.price ?? {})
+      ?? (isPlanTier(metaPlan) ? metaPlan : undefined);
+    await ctx.runMutation(internal.billing.applySubscriptionUpdated, {
+      tenantId: tenantId ? asTenantId(tenantId) : undefined,
+      stripeCustomerId: customer,
+      stripeSubscriptionId: object?.id ?? "unknown",
+      plan,
+      status: object?.status ?? "active",
+    });
   }
   if (event.type === "customer.subscription.deleted") {
     const tenantId = object?.metadata?.tenantId;

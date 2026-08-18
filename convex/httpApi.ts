@@ -4,6 +4,7 @@ import { internal } from "./_generated/api";
 import { classifyTicket, shapeTicket, shapeTicketMessage, slaHours } from "./lib/shape";
 import { applyRouting } from "./lib/routing";
 import { consumeRateLimit } from "./lib/rateLimit";
+import { notifyTicketCreated } from "./lib/notifyTicket";
 import { sha256Hex } from "./lib/secrets";
 import { ticketMessageValidator, ticketValidator } from "./lib/validators";
 import type { Id } from "./_generated/dataModel";
@@ -110,6 +111,13 @@ export const createTicket = internalMutation({
       });
     }
     await applyRouting(ctx, args.tenantId, ticketId, args.subject, category, priority);
+    await notifyTicketCreated(ctx, {
+      tenantId: args.tenantId,
+      ticketId,
+      email: args.customerEmail,
+      customerName: args.customerName,
+      subject: args.subject,
+    });
     await ctx.scheduler.runAfter(0, internal.webhooks.deliver, {
       tenantId: args.tenantId,
       eventType: "TicketCreated",

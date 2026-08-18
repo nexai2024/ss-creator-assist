@@ -1,8 +1,11 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { classifyTicket, shapeArticle, shapeChatMessage, slaHours } from "./lib/shape";
+import { classifyTicket, isoReq, shapeArticle, shapeChatMessage, slaHours } from "./lib/shape";
 import { consumeRateLimit } from "./lib/rateLimit";
+import { notifyTicketCreated } from "./lib/notifyTicket";
 import { articleValidator, chatMessageValidator } from "./lib/validators";
+import type { Doc } from "./_generated/dataModel";
+import type { MutationCtx } from "./_generated/server";
 
 export const helpCenter = query({
   args: { slug: v.string() },
@@ -157,7 +160,125 @@ export const submitTicket = mutation({
       senderName: args.name,
       content: args.body,
     });
+    await notifyTicketCreated(ctx, {
+      tenantId: tenant._id,
+      ticketId,
+      email: args.email,
+      customerName: args.name,
+      subject: args.subject,
+    });
     return { ticket_id: ticketId };
+  },
+});
+
+const publicTicketMessage = v.object({
+  id: v.id("ticketMessages"),
+  sender_type: v.union(v.literal("end_user"), v.literal("agent"), v.literal("system")),
+  sender_name: v.string(),
+  content: v.string(),
+  created_at: v.string(),
+});
+
+const publicTicketValidator = v.object({
+  ticket_id: v.id("tickets"),
+  subject: v.string(),
+  status: v.union(v.literal("open"), v.literal("pending"), v.literal("resolved"), v.literal("closed")),
+  category: v.string(),
+  created_at: v.string(),
+  tenant_name: v.string(),
+  tenant_slug: v.string(),
+  branding_color: v.string(),
+  can_reply: v.boolean(),
+  messages: v.array(publicTicketMessage),
+});
+
+function emailsMatch(stored: string, provided: string): boolean {
+  return stored.trim().toLowerCase() === provided.trim().toLowerCase();
+}
+
+async function publicTicketView(
+  ctx: MutationCtx,
+  ticket: Doc<"tickets">,
+) {
+  const tenant = await ctx.db.get(ticket.tenantId);
+  const integration = tenant
+    ? await ctx.db.query("integrationSettings").withIndex("by_tenant", (q) => q.eq("tenantId", tenant._id)).first()
+    : null;
+  const rows = await ctx.db
+    .query("ticketMessages")
+    .withIndex("by_ticket", (q) => q.eq("ticketId", ticket._id))
+    .take(200);
+  return {
+    ticket_id: ticket._id,
+    subject: ticket.subject,
+    status: ticket.status,
+    category: ticket.category,
+    created_at: isoReq(ticket._creationTime),
+    tenant_name: tenant?.name ?? "Support",
+    tenant_slug: tenant?.slug ?? "",
+    branding_color: integration?.brandingPrimaryColor ?? "#3b82f6",
+    can_reply: ticket.status !== "closed",
+    messages: rows.map((m) => ({
+      id: m._id,
+      sender_type: m.senderType,
+      sender_name: m.senderName,
+      content: m.content,
+      created_at: isoReq(m._creationTime),
+    })),
+  };
+}
+
+async function ticketForCustomer(
+  ctx: MutationCtx,
+  ticketId: string,
+  email: string,
+): Promise<Doc<"tickets"> | null> {
+  const id = ctx.db.normalizeId("tickets", ticketId);
+  if (!id) return null;
+  const ticket = await ctx.db.get(id);
+  if (!ticket || !emailsMatch(ticket.customerEmail, email)) return null;
+  return ticket;
+}
+
+export const lookupTicket = mutation({
+  args: {
+    ticketId: v.string(),
+    email: v.string(),
+  },
+  returns: v.union(publicTicketValidator, v.null()),
+  handler: async (ctx, args) => {
+    await consumeRateLimit(ctx, `lookupTicket:${args.ticketId.slice(0, 48)}`, 8, 10 * 60_000);
+    const ticket = await ticketForCustomer(ctx, args.ticketId, args.email);
+    if (!ticket) return null;
+    return await publicTicketView(ctx, ticket);
+  },
+});
+
+export const replyToTicket = mutation({
+  args: {
+    ticketId: v.string(),
+    email: v.string(),
+    content: v.string(),
+  },
+  returns: publicTicketValidator,
+  handler: async (ctx, args) => {
+    await consumeRateLimit(ctx, `replyTicket:${args.ticketId.slice(0, 48)}`, 8, 10 * 60_000);
+    const ticket = await ticketForCustomer(ctx, args.ticketId, args.email);
+    if (!ticket) throw new Error("Ticket not found");
+    if (ticket.status === "closed") throw new Error("This ticket is closed");
+    const body = args.content.trim();
+    if (!body) throw new Error("Message is required");
+    await ctx.db.insert("ticketMessages", {
+      ticketId: ticket._id,
+      senderType: "end_user",
+      senderName: ticket.customerName,
+      content: body,
+    });
+    if (ticket.status === "resolved") {
+      await ctx.db.patch(ticket._id, { status: "pending" });
+    }
+    const updated = await ctx.db.get(ticket._id);
+    return await publicTicketView(ctx, updated!);
   },
 });
 

@@ -89,8 +89,18 @@ export function BillingPage({ tenant }: { tenant: Tenant | null }) {
     <div className="space-y-5 animate-fade-in max-w-4xl mx-auto">
       <div>
         <h1 className="text-2xl font-bold text-neutral-900">Billing & Subscription</h1>
-        <p className="text-sm text-neutral-500 mt-1">Checkout and the customer portal run on Stripe. Plan and card changes apply after Stripe confirms them.</p>
+        <p className="text-sm text-neutral-500 mt-1">Subscribe with Stripe Checkout. After the first payment, plan changes open the Stripe Customer Portal so you keep one subscription.</p>
       </div>
+
+      {billing && !billing.stripeConfigured && (
+        <div className="flex items-start gap-2 p-3 rounded-lg bg-danger-50 text-danger-700 text-sm">
+          <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+          <span>
+            Stripe is not configured on this Convex deployment. Set <code className="font-mono">STRIPE_SECRET_KEY</code> and{' '}
+            <code className="font-mono">STRIPE_WEBHOOK_SECRET</code> in the Convex dashboard, then retry checkout.
+          </span>
+        </div>
+      )}
 
       {checkoutStatus === 'success' && (
         <div className="flex items-start gap-2 p-3 rounded-lg bg-success-50 text-success-700 text-sm">
@@ -105,6 +115,11 @@ export function BillingPage({ tenant }: { tenant: Tenant | null }) {
       {portalStatus === 'return' && (
         <div className="flex items-start gap-2 p-3 rounded-lg bg-neutral-100 text-neutral-700 text-sm">
           Returned from the Stripe billing portal. Card and cancellation changes appear after Stripe confirms them.
+        </div>
+      )}
+      {(portalStatus === 'plan' || portalStatus === 'updated') && (
+        <div className="flex items-start gap-2 p-3 rounded-lg bg-success-50 text-success-700 text-sm">
+          Plan change submitted. This workspace updates when Stripe confirms the subscription.
         </div>
       )}
 
@@ -127,7 +142,7 @@ export function BillingPage({ tenant }: { tenant: Tenant | null }) {
             onClick={() => void handlePortal()}
             disabled={!billing?.hasCustomer || portalLoading}
             className="btn-secondary text-sm"
-            title={billing?.hasCustomer ? 'Update card or cancel in Stripe' : 'Complete a paid checkout first'}
+            title={billing?.hasCustomer ? 'Update card, cancel, or change plans in Stripe' : 'Complete a paid checkout first'}
           >
             {portalLoading ? <LoadingSpinner size={16} /> : <CreditCard className="w-4 h-4" />}
             Manage payment method
@@ -160,7 +175,7 @@ export function BillingPage({ tenant }: { tenant: Tenant | null }) {
 
       {/* Plan options */}
       <div className="card p-6">
-        <h3 className="text-sm font-semibold text-neutral-800 mb-4">Change Plan</h3>
+        <h3 className="text-sm font-semibold text-neutral-800 mb-4">Plans</h3>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {([
             { tier: 'starter', name: 'Starter', price: 149, icon: Zap, features: ['5,000 MAUs', '1 integration', 'Email support'] },
@@ -185,14 +200,22 @@ export function BillingPage({ tenant }: { tenant: Tenant | null }) {
                 </ul>
                 <button
                   onClick={() => handleUpgrade(plan.tier)}
-                  disabled={isCurrent || upgrading}
+                  disabled={isCurrent || upgrading || billing === undefined || !billing.stripeConfigured}
                   className={`mt-4 w-full text-sm py-2 rounded-lg font-medium transition-colors ${
-                    isCurrent ? 'bg-neutral-100 text-neutral-400 cursor-default'
+                    isCurrent || billing === undefined || !billing.stripeConfigured ? 'bg-neutral-100 text-neutral-400 cursor-default'
                     : upgrading ? 'bg-neutral-100 text-neutral-400'
                     : 'bg-primary-500 text-white hover:bg-primary-600'
                   }`}
                 >
-                  {isCurrent ? 'Current Plan' : upgrading ? <LoadingSpinner size={16} /> : `Pay with Stripe — ${plan.name}`}
+                  {isCurrent
+                    ? 'Current Plan'
+                    : billing && !billing.stripeConfigured
+                      ? 'Stripe not configured'
+                      : upgrading
+                        ? <LoadingSpinner size={16} />
+                        : billing?.hasCustomer
+                          ? `Switch to ${plan.name}`
+                          : `Subscribe — ${plan.name}`}
                 </button>
               </div>
             );
@@ -200,7 +223,7 @@ export function BillingPage({ tenant }: { tenant: Tenant | null }) {
         </div>
         <div className="mt-4 flex items-start gap-2 p-3 rounded-lg bg-warning-50/50 text-warning-700 text-xs">
           <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-          <span>Checkout creates a Stripe subscription. After the first paid checkout, use Manage payment method to update the card or cancel without another Checkout session. Enable the Customer portal in the Stripe Dashboard. Webhook URL: https://YOUR_DEPLOYMENT.convex.site/stripe/webhook</span>
+          <span>The first payment uses Stripe Checkout. Later plan changes open the Customer Portal on the same subscription. Webhook URL: https://YOUR_DEPLOYMENT.convex.site/stripe/webhook — events needed: checkout.session.completed, customer.subscription.updated, customer.subscription.deleted.</span>
         </div>
       </div>
 

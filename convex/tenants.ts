@@ -68,6 +68,6 @@ export const updatePlan = mutation({
   },
   returns: v.null(),
   handler: async () => {
-    throw new Error("Plan changes require a paid Stripe checkout");
+    throw new Error("Plan changes require Stripe Checkout or the Customer Portal");
   },
 });

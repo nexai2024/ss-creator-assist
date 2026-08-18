@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { BookOpen, LifeBuoy, Search, ThumbsDown, ThumbsUp } from 'lucide-react';
+import { BookOpen, LifeBuoy, Search, ThumbsDown, ThumbsUp, Ticket } from 'lucide-react';
 import { LoadingSpinner, EmptyState, ErrorState } from '@/components/States';
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
+import { ticketPublicPath } from '../../convex/lib/chatContent';
 import type { Id } from '../../convex/_generated/dataModel';
 
 type HelpCenterPayload = {
@@ -53,10 +54,16 @@ export function HelpCenterLayout({ children, data }: { children: ReactNode; data
               <p className="text-xs text-neutral-400">Help Center</p>
             </div>
           </Link>
-          <Link to={`/help/${data.tenant.slug}/contact`} className="btn-secondary text-sm">
-            <LifeBuoy className="w-4 h-4" />
-            Contact support
-          </Link>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <Link to="/ticket" className="btn-secondary text-sm">
+              <Ticket className="w-4 h-4" />
+              Check ticket
+            </Link>
+            <Link to={`/help/${data.tenant.slug}/contact`} className="btn-secondary text-sm">
+              <LifeBuoy className="w-4 h-4" />
+              Contact support
+            </Link>
+          </div>
         </div>
       </header>
       <main className="max-w-4xl mx-auto px-4 py-8">{children}</main>
@@ -207,8 +214,15 @@ export function HelpContactPage() {
       {ticketId ? (
         <div className="card p-6">
           <p className="text-sm font-medium text-neutral-800">Ticket submitted</p>
-          <p className="text-sm text-neutral-500 mt-1">Reference {ticketId}. We will follow up at {form.email}.</p>
-          <button className="btn-primary mt-4" onClick={() => navigate(`/help/${center.tenant.slug}`)}>Back to help center</button>
+          <p className="text-sm text-neutral-500 mt-1">We will follow up at {form.email}. Save this link to check status anytime.</p>
+          <div className="flex flex-wrap gap-2 mt-4">
+            <Link to={ticketPublicPath(ticketId, form.email)} className="btn-primary">
+              View ticket status
+            </Link>
+            <button type="button" className="btn-secondary" onClick={() => navigate(`/help/${center.tenant.slug}`)}>
+              Back to help center
+            </button>
+          </div>
         </div>
       ) : (
         <form onSubmit={submit} className="card p-6 space-y-4 max-w-xl">
