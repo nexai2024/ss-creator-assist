@@ -12,12 +12,15 @@ import { useToast } from '@/components/Toast';
 import { useAgents } from '@/hooks/useAgents';
 import { useSavedReplies, useBusinessHours } from '@/hooks/useSolopreneur';
 import { useNavigate, useParams, Link } from 'react-router-dom';
-import { useMutation, useQuery } from 'convex/react';
+import { useMutation, useQuery, useAction } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import type { Id } from '../../convex/_generated/dataModel';
 import { ChatShareBody } from '@/components/ChatShareBody';
 import { Modal } from '@/components/Modal';
 import { encodeChatShare, excerptFrom, type ArticleShare } from '../../convex/lib/chatContent';
+import { AttachButton, AttachmentList } from '@/components/AttachButton';
+import { CopilotBox } from '@/components/CopilotBox';
+import { usePresence } from '@/hooks/usePresence';
 
 type QuickReply = { label: string; text: string };
 
@@ -56,6 +59,12 @@ export function ChatPage({ tenant }: { tenant: Tenant | null; tenants: Tenant[] 
   const { replies: savedReplies, incrementUsage } = useSavedReplies(tenant?.id ?? null);
   const { isCurrentlyOpen } = useBusinessHours(tenant?.id ?? null);
   const businessOpen = isCurrentlyOpen();
+  const others = usePresence({
+    tenantId: tenant?.id ?? null,
+    entityType: 'chat',
+    entityId: selectedId,
+    typing: reply.length > 0,
+  });
   const loading = Boolean(tenant) && conversationRows === undefined;
   const error = null;
 
@@ -90,7 +99,7 @@ export function ChatPage({ tenant }: { tenant: Tenant | null; tenants: Tenant[] 
   const linkedTicket = (history?.tickets[0] as Ticket | undefined) ?? null;
 
   const sendMut = useMutation(api.chat.send);
-  const botMut = useMutation(api.chat.botReply);
+  const botMut = useAction(api.ai.deflectChat);
   const escalateMut = useMutation(api.chat.escalate);
   const noteMut = useMutation(api.chat.addNote);
   const closeMut = useMutation(api.chat.close);
@@ -157,7 +166,7 @@ export function ChatPage({ tenant }: { tenant: Tenant | null; tenants: Tenant[] 
         conversationId: selectedId as Id<'chatConversations'>,
         message: messages.filter((m) => m.sender_type === 'end_user').slice(-1)[0]?.content ?? '',
       });
-      toast('AI assistant replied', 'success');
+      toast('AI assistant replied from the docs', 'success');
     } catch {
       toast('Failed to get AI reply', 'error');
     }
@@ -274,6 +283,11 @@ export function ChatPage({ tenant }: { tenant: Tenant | null; tenants: Tenant[] 
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-neutral-800 truncate">{selected.customer_name}</p>
                     <p className="text-xs text-neutral-400 truncate">{selected.customer_email}</p>
+                    {others.length > 0 && (
+                      <p className="text-xs text-primary-600 truncate">
+                        {others.map((p) => p.display_name).join(', ')} viewing{others.some((p) => p.typing) ? ' · typing' : ''}
+                      </p>
+                    )}
                   </div>
                 </div>
                 <div className="flex items-center gap-1.5 flex-shrink-0">
@@ -341,6 +355,11 @@ export function ChatPage({ tenant }: { tenant: Tenant | null; tenants: Tenant[] 
                 )}
                 <div ref={messagesEndRef} />
               </div>
+              {tenant && selectedId && (
+                <div className="px-5">
+                  <AttachmentList tenantId={tenant.id} entityType="chat" entityId={selectedId} />
+                </div>
+              )}
 
               {/* Input */}
               {selected.status !== 'closed' ? (
@@ -365,6 +384,9 @@ export function ChatPage({ tenant }: { tenant: Tenant | null; tenants: Tenant[] 
                     <button onClick={() => setShowSavedReplies(!showSavedReplies)} className="btn-secondary" aria-label="Saved replies" title="Saved replies">
                       <Zap className="w-4 h-4" />
                     </button>
+                    {tenant && selectedId && (
+                      <AttachButton tenantId={tenant.id} entityType="chat" entityId={selectedId} />
+                    )}
                     <button onClick={handleBotReply} disabled={botLoading || !tenant} className="btn-secondary" aria-label="Get AI reply" title="AI assistant reply">
                       {botLoading ? <LoadingSpinner size={16} /> : <Bot className="w-4 h-4" />}
                     </button>
@@ -474,6 +496,13 @@ export function ChatPage({ tenant }: { tenant: Tenant | null; tenants: Tenant[] 
                         <Check className="w-4 h-4 text-success-500" /> Acknowledge
                       </button>
                     </div>
+                    {tenant && selected && (
+                      <CopilotBox
+                        tenantId={tenant.id}
+                        conversationId={selected.id}
+                        onInsert={(text) => setReply(text)}
+                      />
+                    )}
                   </div>
                 )}
 

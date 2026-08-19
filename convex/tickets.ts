@@ -3,9 +3,10 @@ import { paginationOptsValidator } from "convex/server";
 import { mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { requireCapability, requireMember, writeAudit } from "./lib/auth";
-import { applyRouting } from "./lib/routing";
-import { notifyTicketCreated, notifyTicketReply } from "./lib/notifyTicket";
-import { classifyTicket, shapeTicket, shapeTicketMessage, slaHours } from "./lib/shape";
+import { insertOpenTicket } from "./lib/insertTicket";
+import { notifyTicketCreated, notifyTicketReply, notifyTicketStatusChange } from "./lib/notifyTicket";
+import { applyWorkflows } from "./lib/workflows";
+import { shapeTicket, shapeTicketMessage } from "./lib/shape";
 import { paginationResult, ticketMessageValidator, ticketValidator } from "./lib/validators";
 
 export const list = query({
@@ -19,6 +20,21 @@ export const list = query({
       .order("desc")
       .paginate(args.paginationOpts);
     return { ...result, page: result.page.map(shapeTicket) };
+  },
+});
+
+export const search = query({
+  args: { tenantId: v.id("tenants"), needle: v.string() },
+  returns: v.array(ticketValidator),
+  handler: async (ctx, args) => {
+    await requireMember(ctx, args.tenantId);
+    const needle = args.needle.trim();
+    if (needle.length < 2) return [];
+    const hits = await ctx.db
+      .query("tickets")
+      .withSearchIndex("search_subject", (q) => q.search("subject", needle).eq("tenantId", args.tenantId))
+      .take(25);
+    return hits.map(shapeTicket);
   },
 });
 
@@ -61,30 +77,16 @@ export const create = mutation({
   returns: ticketValidator,
   handler: async (ctx, args) => {
     const { userId } = await requireMember(ctx, args.tenantId);
-    const classified = classifyTicket(args.subject, args.body ?? "");
-    const category = args.category || classified.category;
-    const ticketId = await ctx.db.insert("tickets", {
+    const ticketId = await insertOpenTicket(ctx, {
       tenantId: args.tenantId,
       subject: args.subject,
-      category,
+      category: args.category,
       priority: args.priority,
-      status: "open",
       customerName: args.customerName,
       customerEmail: args.customerEmail,
-      deflectionSuggested: classified.deflectionSuggested,
-      customFields: {},
-      tags: [],
-      slaDeadline: Date.now() + slaHours(args.priority) * 3600000,
+      body: args.body,
+      source: "console",
     });
-    if (args.body) {
-      await ctx.db.insert("ticketMessages", {
-        ticketId,
-        senderType: "end_user",
-        senderName: args.customerName,
-        content: args.body,
-      });
-    }
-    await applyRouting(ctx, args.tenantId, ticketId, args.subject, category, args.priority);
     await notifyTicketCreated(ctx, {
       tenantId: args.tenantId,
       ticketId,
@@ -128,6 +130,9 @@ export const addMessage = mutation({
       senderName: args.senderName,
       content: args.content,
     });
+    if (ticket.firstRespondedAt === undefined) {
+      await ctx.db.patch(args.ticketId, { firstRespondedAt: Date.now() });
+    }
     await notifyTicketReply(ctx, {
       tenantId: args.tenantId,
       ticketId: args.ticketId,
@@ -159,9 +164,19 @@ export const updateStatus = mutation({
     await requireMember(ctx, args.tenantId);
     const ticket = await ctx.db.get(args.ticketId);
     if (!ticket || ticket.tenantId !== args.tenantId) throw new Error("Ticket not found");
+    if (ticket.status === args.status) return shapeTicket(ticket);
     await ctx.db.patch(args.ticketId, {
       status: args.status,
       resolvedAt: args.status === "resolved" || args.status === "closed" ? Date.now() : ticket.resolvedAt,
+    });
+    await applyWorkflows(ctx, args.tenantId, args.ticketId, "status_changed");
+    await notifyTicketStatusChange(ctx, {
+      tenantId: args.tenantId,
+      ticketId: args.ticketId,
+      email: ticket.customerEmail,
+      customerName: ticket.customerName,
+      subject: ticket.subject,
+      status: args.status,
     });
     const updated = await ctx.db.get(args.ticketId);
     return shapeTicket(updated!);

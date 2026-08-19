@@ -5,6 +5,7 @@ import type { MutationCtx } from "./_generated/server";
 import { requireMember, requirePermission, writeAudit } from "./lib/auth";
 import { shapeAgent, shapeIntegration } from "./lib/shape";
 import { encryptSecret, hintFor, randomToken, sha256Hex } from "./lib/secrets";
+import { normalizeEmail, normalizeHost } from "./lib/hosts";
 import { agentValidator, integrationValidator, routingRuleValidator } from "./lib/validators";
 
 function integrationWrite(row: Doc<"integrationSettings">) {
@@ -30,6 +31,8 @@ function integrationWrite(row: Doc<"integrationSettings">) {
     ssoEnabled: row.ssoEnabled,
     ssoProvider: row.ssoProvider,
     ssoMetadataUrl: row.ssoMetadataUrl,
+    inboundEmailAddress: row.inboundEmailAddress,
+    locale: row.locale,
     onboardingCompleted: row.onboardingCompleted,
     onboardingStep: row.onboardingStep,
     updatedAt: Date.now(),
@@ -140,6 +143,8 @@ export const update = mutation({
       ssoEnabled: v.optional(v.boolean()),
       ssoProvider: v.optional(v.string()),
       ssoMetadataUrl: v.optional(v.string()),
+      inboundEmailAddress: v.optional(v.string()),
+      locale: v.optional(v.string()),
       onboardingCompleted: v.optional(v.boolean()),
       onboardingStep: v.optional(v.number()),
     }),
@@ -167,6 +172,8 @@ export const update = mutation({
       ssoEnabled: "ssoEnabled",
       ssoProvider: "ssoProvider",
       ssoMetadataUrl: "ssoMetadataUrl",
+      inboundEmailAddress: "inboundEmailAddress",
+      locale: "locale",
       onboardingCompleted: "onboardingCompleted",
       onboardingStep: "onboardingStep",
     };
@@ -184,6 +191,12 @@ export const update = mutation({
       }
       const field = map[k];
       if (field) Object.assign(next, { [field]: v_ });
+    }
+    if (typeof next.customDomain === "string") {
+      next.customDomain = normalizeHost(next.customDomain) || undefined;
+    }
+    if (typeof next.inboundEmailAddress === "string") {
+      next.inboundEmailAddress = normalizeEmail(next.inboundEmailAddress) || undefined;
     }
     await ctx.db.replace(args.integrationId, next);
     const updated = await ctx.db.get(args.integrationId);

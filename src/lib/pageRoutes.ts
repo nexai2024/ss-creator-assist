@@ -2,6 +2,7 @@ import type { PageId } from '@/components/AppShell';
 
 export const PAGE_PATHS: Record<PageId, string> = {
   dashboard: '/dashboard',
+  reports: '/reports',
   inbox: '/inbox',
   tickets: '/tickets',
   chat: '/chat',
@@ -28,6 +29,7 @@ export function pathForPage(page: PageId, extra?: { integrationId?: string; tick
 
 export function pageFromPath(pathname: string): PageId {
   if (pathname.startsWith('/inbox')) return 'inbox';
+  if (pathname.startsWith('/reports')) return 'reports';
   if (pathname.startsWith('/tickets')) return 'tickets';
   if (pathname.startsWith('/chat')) return 'chat';
   if (pathname.startsWith('/knowledge')) return 'knowledge';

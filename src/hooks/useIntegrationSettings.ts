@@ -23,6 +23,8 @@ function toPatch(patch: Partial<IntegrationSettings>) {
     ssoEnabled: patch.sso_enabled,
     ssoProvider: patch.sso_provider ?? undefined,
     ssoMetadataUrl: patch.sso_metadata_url ?? undefined,
+    inboundEmailAddress: patch.inbound_email_address ?? undefined,
+    locale: patch.locale ?? undefined,
     onboardingCompleted: patch.onboarding_completed,
     onboardingStep: patch.onboarding_step,
   };

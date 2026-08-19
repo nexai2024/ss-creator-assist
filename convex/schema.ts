@@ -63,10 +63,24 @@ export default defineSchema({
     deflectionSuggested: v.boolean(),
     customFields: v.record(v.string(), v.string()),
     tags: v.array(v.string()),
+    source: v.optional(v.union(
+      v.literal("console"),
+      v.literal("help_center"),
+      v.literal("chat"),
+      v.literal("email"),
+      v.literal("api"),
+    )),
+    firstRespondedAt: v.optional(v.number()),
+    inboundMessageId: v.optional(v.string()),
   })
     .index("by_tenant", ["tenantId"])
     .index("by_tenant_and_status", ["tenantId", "status"])
-    .index("by_tenant_and_email", ["tenantId", "customerEmail"]),
+    .index("by_tenant_and_email", ["tenantId", "customerEmail"])
+    .index("by_inbound_message", ["inboundMessageId"])
+    .searchIndex("search_subject", {
+      searchField: "subject",
+      filterFields: ["tenantId"],
+    }),
 
   ticketMessages: defineTable({
     ticketId: v.id("tickets"),
@@ -113,10 +127,21 @@ export default defineSchema({
     helpfulVotes: v.number(),
     unhelpfulVotes: v.number(),
     updatedAt: v.number(),
+    searchText: v.optional(v.string()),
+    embedding: v.optional(v.array(v.float64())),
   })
     .index("by_tenant", ["tenantId"])
     .index("by_tenant_and_slug", ["tenantId", "slug"])
-    .index("by_tenant_and_status", ["tenantId", "status"]),
+    .index("by_tenant_and_status", ["tenantId", "status"])
+    .searchIndex("search_body", {
+      searchField: "searchText",
+      filterFields: ["tenantId", "status"],
+    })
+    .vectorIndex("by_embedding", {
+      vectorField: "embedding",
+      dimensions: 1536,
+      filterFields: ["tenantId"],
+    }),
 
   gdprRequests: defineTable({
     tenantId: v.id("tenants"),
@@ -163,13 +188,17 @@ export default defineSchema({
     ssoEnabled: v.boolean(),
     ssoProvider: v.optional(v.string()),
     ssoMetadataUrl: v.optional(v.string()),
+    inboundEmailAddress: v.optional(v.string()),
+    locale: v.optional(v.string()),
     onboardingCompleted: v.boolean(),
     onboardingStep: v.number(),
     updatedAt: v.number(),
   })
     .index("by_tenant", ["tenantId"])
     .index("by_api_key", ["apiKey"])
-    .index("by_api_key_hash", ["apiKeyHash"]),
+    .index("by_api_key_hash", ["apiKeyHash"])
+    .index("by_custom_domain", ["customDomain"])
+    .index("by_inbound_email", ["inboundEmailAddress"]),
 
   routingRules: defineTable({
     tenantId: v.id("tenants"),
@@ -289,4 +318,51 @@ export default defineSchema({
     windowStart: v.number(),
     count: v.number(),
   }).index("by_key", ["key"]),
+
+  attachments: defineTable({
+    tenantId: v.id("tenants"),
+    entityType: v.union(v.literal("ticket"), v.literal("chat")),
+    entityId: v.string(),
+    storageId: v.id("_storage"),
+    fileName: v.string(),
+    contentType: v.string(),
+    size: v.number(),
+    uploadedBy: v.optional(v.string()),
+  })
+    .index("by_entity", ["entityType", "entityId"])
+    .index("by_tenant", ["tenantId"]),
+
+  presence: defineTable({
+    tenantId: v.id("tenants"),
+    userId: v.id("users"),
+    displayName: v.string(),
+    entityType: v.union(v.literal("ticket"), v.literal("chat")),
+    entityId: v.string(),
+    typing: v.boolean(),
+    lastSeenAt: v.number(),
+  }).index("by_entity", ["tenantId", "entityType", "entityId"]),
+
+  workflows: defineTable({
+    tenantId: v.id("tenants"),
+    name: v.string(),
+    trigger: v.union(v.literal("ticket_created"), v.literal("status_changed")),
+    enabled: v.boolean(),
+    steps: v.array(v.object({
+      type: v.union(
+        v.literal("assign_agent"),
+        v.literal("set_priority"),
+        v.literal("add_tag"),
+        v.literal("set_status"),
+      ),
+      value: v.string(),
+    })),
+  }).index("by_tenant", ["tenantId"]),
+
+  campaigns: defineTable({
+    tenantId: v.id("tenants"),
+    integrationId: v.optional(v.id("integrationSettings")),
+    title: v.string(),
+    body: v.string(),
+    enabled: v.boolean(),
+  }).index("by_tenant", ["tenantId"]),
 });

@@ -193,6 +193,59 @@ const stripeWebhook = httpAction(async (ctx, req) => {
   });
 });
 
+function emailField(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (Array.isArray(value) && typeof value[0] === "string") return value[0];
+  if (value && typeof value === "object" && "address" in value && typeof (value as { address: unknown }).address === "string") {
+    return (value as { address: string }).address;
+  }
+  if (value && typeof value === "object" && "email" in value && typeof (value as { email: unknown }).email === "string") {
+    return (value as { email: string }).email;
+  }
+  return "";
+}
+
+const emailInbound = httpAction(async (ctx, req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: corsHeaders(req) });
+  }
+  let payload: Record<string, unknown> = {};
+  try {
+    payload = await req.json() as Record<string, unknown>;
+  } catch {
+    return json({ error: "Invalid JSON" }, 400, corsHeaders(req));
+  }
+  const data = (payload.data && typeof payload.data === "object" ? payload.data : payload) as Record<string, unknown>;
+  const to = emailField(data.to) || emailField(payload.to);
+  const from = emailField(data.from) || emailField(payload.from);
+  const subject = typeof data.subject === "string" ? data.subject : typeof payload.subject === "string" ? payload.subject : "(no subject)";
+  const text = typeof data.text === "string"
+    ? data.text
+    : typeof data.html === "string"
+      ? data.html.replace(/<[^>]+>/g, " ")
+      : typeof payload.text === "string" ? payload.text : "";
+  const fromName = typeof data.from === "string" && data.from.includes("<")
+    ? data.from.replace(/<[^>]+>/, "").trim()
+    : undefined;
+  const messageId = typeof data.email_id === "string"
+    ? data.email_id
+    : typeof data.message_id === "string"
+      ? data.message_id
+      : typeof payload.id === "string" ? payload.id : undefined;
+  if (!to || !from) {
+    return json({ error: "from and to are required" }, 400, corsHeaders(req));
+  }
+  const ticket = await ctx.runMutation(internal.inbound.createFromEmail, {
+    to,
+    from,
+    fromName,
+    subject,
+    text,
+    messageId,
+  });
+  return json({ received: true, ticket_id: ticket?.id ?? null }, ticket ? 200 : 404, corsHeaders(req));
+});
+
 const http = httpRouter();
 auth.addHttpRoutes(http);
 
@@ -202,5 +255,7 @@ http.route({ path: "/ticket-api/tickets", method: "OPTIONS", handler: ticketApi 
 http.route({ pathPrefix: "/ticket-api/tickets/", method: "GET", handler: ticketApi });
 http.route({ pathPrefix: "/ticket-api/tickets/", method: "OPTIONS", handler: ticketApi });
 http.route({ path: "/stripe/webhook", method: "POST", handler: stripeWebhook });
+http.route({ path: "/email/inbound", method: "POST", handler: emailInbound });
+http.route({ path: "/email/inbound", method: "OPTIONS", handler: emailInbound });
 
 export default http;

@@ -24,3 +24,19 @@ export const current = query({
     };
   },
 });
+
+export const authMethods = query({
+  args: {},
+  returns: v.object({
+    google: v.boolean(),
+    oidc: v.boolean(),
+    oidc_name: v.string(),
+  }),
+  handler: async () => {
+    return {
+      google: Boolean(process.env.AUTH_GOOGLE_ID),
+      oidc: Boolean(process.env.AUTH_OIDC_ISSUER && process.env.AUTH_OIDC_ID && process.env.AUTH_OIDC_SECRET),
+      oidc_name: process.env.AUTH_OIDC_NAME ?? "SSO",
+    };
+  },
+});

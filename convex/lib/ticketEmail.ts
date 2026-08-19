@@ -47,6 +47,27 @@ ${cta(url, "View ticket status")}
   };
 }
 
+export function ticketStatusMail(opts: {
+  customerName: string;
+  tenantName: string;
+  subject: string;
+  status: string;
+  ticketId: string;
+  email: string;
+}): { subject: string; html: string } {
+  const url = statusLink(opts.ticketId, opts.email);
+  const greeting = opts.customerName.trim() ? `Hi ${escapeHtml(opts.customerName)},` : "Hi,";
+  const label = opts.status.replace(/_/g, " ");
+  return {
+    subject: `Ticket ${label}: ${opts.subject}`,
+    html: wrap(`
+<p>${greeting}</p>
+<p>Your ${escapeHtml(opts.tenantName)} ticket <strong>${escapeHtml(opts.subject)}</strong> is now <strong>${escapeHtml(label)}</strong>.</p>
+${cta(url, "View ticket status")}
+`),
+  };
+}
+
 export function ticketReplyMail(opts: {
   senderName: string;
   tenantName: string;

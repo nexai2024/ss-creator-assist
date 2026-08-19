@@ -1,9 +1,12 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { mutation, query, internalMutation, type MutationCtx } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 import { requireMember, writeAudit } from "./lib/auth";
-import { classifyTicket, shapeConversation, shapeChatMessage, shapeTicket, slaHours } from "./lib/shape";
+import { classifyTicket, shapeConversation, shapeChatMessage, shapeTicket } from "./lib/shape";
 import { encodeChatShare, excerptFrom } from "./lib/chatContent";
 import { notifyTicketCreated } from "./lib/notifyTicket";
+import { insertOpenTicket } from "./lib/insertTicket";
+import { keywordArticles } from "./lib/retrieve";
 import { chatMessageValidator, conversationValidator, ticketValidator } from "./lib/validators";
 
 export const list = query({
@@ -120,6 +123,34 @@ export const notes = query({
   },
 });
 
+async function writeBotMessage(
+  ctx: MutationCtx,
+  args: { tenantId: Id<"tenants">; conversationId: Id<"chatConversations">; content: string },
+) {
+  const conv = await ctx.db.get(args.conversationId);
+  if (!conv || conv.tenantId !== args.tenantId) throw new Error("Conversation not found");
+  const id = await ctx.db.insert("chatMessages", {
+    conversationId: args.conversationId,
+    senderType: "bot" as const,
+    senderName: "Webwi Assistant",
+    content: args.content,
+  });
+  const msg = await ctx.db.get(id);
+  return shapeChatMessage(msg!);
+}
+
+export const insertBotMessage = internalMutation({
+  args: {
+    tenantId: v.id("tenants"),
+    conversationId: v.id("chatConversations"),
+    content: v.string(),
+  },
+  returns: chatMessageValidator,
+  handler: async (ctx, args) => {
+    return await writeBotMessage(ctx, args);
+  },
+});
+
 export const botReply = mutation({
   args: {
     tenantId: v.id("tenants"),
@@ -129,15 +160,9 @@ export const botReply = mutation({
   returns: chatMessageValidator,
   handler: async (ctx, args) => {
     await requireMember(ctx, args.tenantId);
-    const articles = await ctx.db
-      .query("kbArticles")
-      .withIndex("by_tenant_and_status", (q) => q.eq("tenantId", args.tenantId).eq("status", "published"))
-      .take(50);
     const tenant = await ctx.db.get(args.tenantId);
-    const needle = args.message.toLowerCase();
-    const match = articles.find(
-      (a) => a.title.toLowerCase().includes(needle.slice(0, 40)) || a.content.toLowerCase().includes(needle.slice(0, 40)),
-    );
+    const matches = await keywordArticles(ctx, args.tenantId, args.message, 3);
+    const match = matches[0];
     const content = match && tenant
       ? encodeChatShare({
         kind: "article",
@@ -147,15 +172,12 @@ export const botReply = mutation({
         tenantSlug: tenant.slug,
         excerpt: excerptFrom(match.content),
       }, "I found an article that may help:")
-      : "I could not find a matching article. An agent will follow up shortly.";
-    const id = await ctx.db.insert("chatMessages", {
+      : "I could not find this in the published docs. An agent will follow up shortly.";
+    return await writeBotMessage(ctx, {
+      tenantId: args.tenantId,
       conversationId: args.conversationId,
-      senderType: "bot",
-      senderName: "MSE Assistant",
       content,
     });
-    const msg = await ctx.db.get(id);
-    return shapeChatMessage(msg!);
   },
 });
 
@@ -172,24 +194,16 @@ export const escalate = mutation({
     const conv = await ctx.db.get(args.conversationId);
     if (!conv || conv.tenantId !== args.tenantId) throw new Error("Conversation not found");
     const classified = classifyTicket(conv.customerName, args.reason);
-    const ticketId = await ctx.db.insert("tickets", {
+    const ticketId = await insertOpenTicket(ctx, {
       tenantId: args.tenantId,
       subject: `Escalated from chat: ${conv.customerName}`,
       category: classified.category === "General" ? "Escalation" : classified.category,
       priority: args.priority,
-      status: "open",
       customerName: conv.customerName,
       customerEmail: conv.customerEmail,
-      deflectionSuggested: false,
-      customFields: {},
+      body: `Escalated from live chat. Reason: ${args.reason}. Conversation ID: ${args.conversationId}`,
+      source: "chat",
       tags: ["escalated", "from-chat"],
-      slaDeadline: Date.now() + slaHours(args.priority) * 3600000,
-    });
-    await ctx.db.insert("ticketMessages", {
-      ticketId,
-      senderType: "system",
-      senderName: "System",
-      content: `Escalated from live chat. Reason: ${args.reason}. Conversation ID: ${args.conversationId}`,
     });
     await ctx.db.insert("chatMessages", {
       conversationId: args.conversationId,

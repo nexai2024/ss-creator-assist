@@ -5,6 +5,7 @@ import { useQuery } from 'convex/react';
 import { useAuth } from '@/hooks/useAuth';
 import { FullPageLoader } from '@/components/States';
 import { api } from '../../convex/_generated/api';
+import { WebwiWordmark } from '@/components/WebwiMark';
 
 const ROLE_LABEL: Record<string, string> = {
   admin: 'Admin',
@@ -72,17 +73,12 @@ export function CreateWorkspacePage() {
   return (
     <div className="min-h-screen bg-neutral-50 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
-        <div className="flex items-center justify-center gap-3 mb-8">
-          <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center shadow-sm">
-            {inviteToken ? <UserPlus className="w-6 h-6 text-white" /> : <Building2 className="w-6 h-6 text-white" />}
-          </div>
-          <div>
-            <h1 className="text-xl font-bold text-neutral-900">
-              {inviteToken ? 'Join a workspace' : 'Create your workspace'}
-            </h1>
-            <p className="text-xs text-neutral-400">Signed in as {user.email}</p>
-          </div>
+        <div className="flex items-center justify-center mb-8">
+          <WebwiWordmark subtitle={`Signed in as ${user.email}`} />
         </div>
+        <h1 className="text-lg font-semibold text-neutral-900 text-center mb-6">
+          {inviteToken ? 'Join a workspace' : 'Create your workspace'}
+        </h1>
 
         <div className="card p-8">
           {inviteToken && peeked === undefined && (

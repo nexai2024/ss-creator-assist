@@ -3,9 +3,10 @@ import { useParams } from 'react-router-dom';
 import { Send } from 'lucide-react';
 import { LoadingSpinner } from '@/components/States';
 import { ChatShareBody } from '@/components/ChatShareBody';
-import { useMutation, useQuery } from 'convex/react';
+import { useAction, useMutation, useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import type { Id } from '../../convex/_generated/dataModel';
+import { t } from '@/lib/i18n';
 
 type WidgetConfig = {
   integration_id: string;
@@ -18,6 +19,8 @@ type WidgetConfig = {
   is_open: boolean;
   auto_responder_enabled: boolean;
   auto_responder_message: string;
+  locale: string;
+  campaign: { id: string; title: string; body: string } | null;
 };
 
 type ChatMsg = {
@@ -38,6 +41,7 @@ export function WidgetPage() {
   ) as WidgetConfig | null | undefined;
   const startMut = useMutation(api.public.startChat);
   const sendMut = useMutation(api.public.sendChatMessage);
+  const deflect = useAction(api.ai.deflectVisitor);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [draft, setDraft] = useState('');
@@ -45,6 +49,7 @@ export function WidgetPage() {
   const [visitorToken, setVisitorToken] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [dismissedCampaign, setDismissedCampaign] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
 
   const messages = useQuery(
@@ -75,6 +80,9 @@ export function WidgetPage() {
   }
 
   const color = config.color || '#3b82f6';
+  const locale = new URLSearchParams(window.location.search).get('locale') || config.locale;
+  const campaignKey = config.campaign ? `mse-proactive-${config.campaign.id}` : '';
+  const showCampaign = Boolean(config.campaign) && !dismissedCampaign && (!campaignKey || !localStorage.getItem(campaignKey));
 
   const startChat = async (e: FormEvent) => {
     e.preventDefault();
@@ -90,7 +98,15 @@ export function WidgetPage() {
       setConversationId(started.conversation_id);
       setVisitorToken(started.visitor_token);
       sessionStorage.setItem(SESSION_KEY(integrationId), JSON.stringify({ ...started, email }));
+      const first = draft.trim();
       setDraft('');
+      if (first) {
+        void deflect({
+          conversationId: started.conversation_id,
+          visitorToken: started.visitor_token,
+          message: first,
+        });
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not start chat');
     }
@@ -99,13 +115,23 @@ export function WidgetPage() {
 
   const send = async () => {
     if (!conversationId || !visitorToken || !draft.trim()) return;
+    const message = draft.trim();
+    setDraft('');
     setSending(true);
     await sendMut({
       conversationId: conversationId as Id<'chatConversations'>,
       visitorToken,
-      content: draft.trim(),
+      content: message,
     });
-    setDraft('');
+    try {
+      await deflect({
+        conversationId: conversationId as Id<'chatConversations'>,
+        visitorToken,
+        message,
+      });
+    } catch {
+      // Keyword fallback lives in the console bot; visitor can wait for an agent.
+    }
     setSending(false);
   };
 
@@ -113,15 +139,31 @@ export function WidgetPage() {
     <div className="h-screen flex flex-col bg-white">
       <div className="px-4 py-3 text-white" style={{ background: color }}>
         <p className="text-sm font-semibold">{config.tenant_name}</p>
-        <p className="text-xs opacity-80">{config.is_open ? 'We typically reply in a few minutes' : 'Currently away'}</p>
+        <p className="text-xs opacity-80">{config.is_open ? t(locale, 'replySoon') : t(locale, 'away')}</p>
       </div>
+      {showCampaign && config.campaign && (
+        <div className="px-4 py-3 bg-amber-50 border-b border-amber-100 text-sm text-neutral-800">
+          <p className="font-medium">{config.campaign.title}</p>
+          <p className="text-xs mt-1">{config.campaign.body}</p>
+          <button
+            type="button"
+            className="text-xs font-medium text-primary-700 mt-2"
+            onClick={() => {
+              if (campaignKey) localStorage.setItem(campaignKey, '1');
+              setDismissedCampaign(true);
+            }}
+          >
+            {t(locale, 'proactiveDismiss')}
+          </button>
+        </div>
+      )}
       {!conversationId ? (
         <form onSubmit={startChat} className="flex-1 p-4 space-y-3 overflow-y-auto">
           <p className="text-sm text-neutral-600">{config.greeting ?? 'Hi! How can we help you today?'}</p>
-          <input className="input" placeholder="Your name" required value={name} onChange={(e) => setName(e.target.value)} />
-          <input className="input" type="email" placeholder="Email" required value={email} onChange={(e) => setEmail(e.target.value)} />
-          <textarea className="input resize-none" rows={4} placeholder="How can we help?" required value={draft} onChange={(e) => setDraft(e.target.value)} />
-          <button className="btn-primary w-full" disabled={sending} style={{ background: color }}>{sending ? 'Starting…' : 'Start chat'}</button>
+          <input className="input" placeholder={t(locale, 'name')} required value={name} onChange={(e) => setName(e.target.value)} />
+          <input className="input" type="email" placeholder={t(locale, 'email')} required value={email} onChange={(e) => setEmail(e.target.value)} />
+          <textarea className="input resize-none" rows={4} placeholder={t(locale, 'howHelp')} required value={draft} onChange={(e) => setDraft(e.target.value)} />
+          <button className="btn-primary w-full" disabled={sending} style={{ background: color }}>{sending ? '…' : t(locale, 'startChat')}</button>
         </form>
       ) : (
         <>
@@ -141,7 +183,7 @@ export function WidgetPage() {
             <div ref={endRef} />
           </div>
           <div className="p-3 border-t border-neutral-100 flex gap-2">
-            <input className="input flex-1" value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') send(); }} placeholder="Type a message..." />
+            <input className="input flex-1" value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') send(); }} placeholder={t(locale, 'typeMessage')} />
             <button className="btn-primary" onClick={send} disabled={sending} style={{ background: color }}><Send className="w-4 h-4" /></button>
           </div>
         </>

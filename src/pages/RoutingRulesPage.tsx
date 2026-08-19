@@ -6,6 +6,9 @@ import { useAgents } from '@/hooks/useAgents';
 import { Modal } from '@/components/Modal';
 import { LoadingSpinner, EmptyState, ErrorState, TableSkeleton } from '@/components/States';
 import { useToast } from '@/components/Toast';
+import { useMutation, useQuery } from 'convex/react';
+import { api } from '../../convex/_generated/api';
+import type { Id } from '../../convex/_generated/dataModel';
 
 export function RoutingRulesPage({ tenant }: { tenant: Tenant | null }) {
   const { rules, loading, error, create, update, remove } = useRoutingRules(tenant?.id ?? null);
@@ -85,6 +88,7 @@ export function RoutingRulesPage({ tenant }: { tenant: Tenant | null }) {
           }
         }}
       />
+      <WorkflowsCard tenantId={tenant.id} />
     </div>
   );
 }
@@ -244,5 +248,75 @@ function CreateRuleModal({
         </div>
       </div>
     </Modal>
+  );
+}
+
+function WorkflowsCard({ tenantId }: { tenantId: string }) {
+  const { toast } = useToast();
+  const { agents } = useAgents(tenantId);
+  const rows = useQuery(api.workflows.list, { tenantId: tenantId as Id<'tenants'> });
+  const createWf = useMutation(api.workflows.create);
+  const toggleWf = useMutation(api.workflows.update);
+  const removeWf = useMutation(api.workflows.remove);
+  const [name, setName] = useState('On new ticket');
+  const [trigger, setTrigger] = useState<'ticket_created' | 'status_changed'>('ticket_created');
+  const [stepType, setStepType] = useState<'add_tag' | 'set_priority' | 'assign_agent' | 'set_status'>('add_tag');
+  const [stepValue, setStepValue] = useState('email');
+
+  return (
+    <div className="card p-5 space-y-3">
+      <h2 className="text-lg font-semibold text-neutral-900">Multi-step workflows</h2>
+      <p className="text-sm text-neutral-500">Run several actions after a ticket is created or its status changes. Routing rules still handle the first match.</p>
+      {(rows ?? []).map((wf) => (
+        <div key={wf.id} className="flex items-center justify-between gap-3 py-2 border-t border-neutral-100">
+          <div>
+            <p className="text-sm font-medium text-neutral-800">{wf.name}</p>
+            <p className="text-xs text-neutral-400">{wf.trigger.replace('_', ' ')} · {wf.steps.map((s) => `${s.type}:${s.value}`).join(' → ')}</p>
+          </div>
+          <div className="flex gap-2">
+            <button className="btn-secondary text-xs" onClick={() => void toggleWf({ tenantId: tenantId as Id<'tenants'>, workflowId: wf.id, enabled: !wf.enabled })}>
+              {wf.enabled ? 'On' : 'Off'}
+            </button>
+            <button className="btn-ghost text-danger-500" onClick={() => void removeWf({ tenantId: tenantId as Id<'tenants'>, workflowId: wf.id })}>
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      ))}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2">
+        <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Workflow name" />
+        <select className="input" value={trigger} onChange={(e) => setTrigger(e.target.value as typeof trigger)}>
+          <option value="ticket_created">When a ticket is created</option>
+          <option value="status_changed">When status changes</option>
+        </select>
+        <select className="input" value={stepType} onChange={(e) => setStepType(e.target.value as typeof stepType)}>
+          <option value="add_tag">Add tag</option>
+          <option value="set_priority">Set priority</option>
+          <option value="assign_agent">Assign agent</option>
+          <option value="set_status">Set status</option>
+        </select>
+        {stepType === 'assign_agent' ? (
+          <select className="input" value={stepValue} onChange={(e) => setStepValue(e.target.value)}>
+            {agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+          </select>
+        ) : (
+          <input className="input" value={stepValue} onChange={(e) => setStepValue(e.target.value)} placeholder="tag, priority, or status" />
+        )}
+      </div>
+      <button
+        className="btn-primary"
+        onClick={async () => {
+          await createWf({
+            tenantId: tenantId as Id<'tenants'>,
+            name,
+            trigger,
+            steps: [{ type: stepType, value: stepValue }],
+          });
+          toast('Workflow created', 'success');
+        }}
+      >
+        Add workflow
+      </button>
+    </div>
   );
 }

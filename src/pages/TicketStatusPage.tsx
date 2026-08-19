@@ -16,6 +16,8 @@ type PublicTicket = {
   tenant_slug: string;
   branding_color: string;
   can_reply: boolean;
+  csat_score: number | null;
+  can_csat: boolean;
   messages: Array<{
     id: string;
     sender_type: 'end_user' | 'agent' | 'system';
@@ -30,6 +32,7 @@ export function TicketStatusPage() {
   const [searchParams] = useSearchParams();
   const lookup = useMutation(api.public.lookupTicket);
   const replyMut = useMutation(api.public.replyToTicket);
+  const csatMut = useMutation(api.public.submitCsat);
   const [ticketId, setTicketId] = useState(ticketIdParam ?? '');
   const [email, setEmail] = useState(searchParams.get('email') ?? '');
   const [ticket, setTicket] = useState<PublicTicket | null>(null);
@@ -213,6 +216,31 @@ export function TicketStatusPage() {
               </form>
             ) : (
               <p className="text-sm text-neutral-400 text-center">This ticket is closed. Contact support if you need more help.</p>
+            )}
+
+            {ticket.can_csat && (
+              <div className="card p-5">
+                <p className="text-sm font-medium text-neutral-800 mb-2">How did we do?</p>
+                <div className="flex gap-2">
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      className="btn-secondary"
+                      onClick={() => {
+                        void csatMut({ ticketId: ticket.ticket_id, email: email.trim(), rating: n }).then(setTicket).catch((err) => {
+                          setError(err instanceof Error ? err.message : 'Could not submit rating');
+                        });
+                      }}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            {ticket.csat_score !== null && (
+              <p className="text-sm text-neutral-500 text-center">Thanks for rating this ticket {ticket.csat_score}/5.</p>
             )}
           </>
         )}

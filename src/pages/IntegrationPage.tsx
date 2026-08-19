@@ -29,6 +29,9 @@ import { useToast } from '@/components/Toast';
 import { useDebounce } from '@/hooks/useDebounce';
 import { createTicketCurl, isLocalAppOrigin, publicAppOrigin, ticketApiUrl, widgetSnippet } from '@/lib/public';
 import { convexSiteUrl } from '@/lib/convex';
+import { useMutation, useQuery } from 'convex/react';
+import { api } from '../../convex/_generated/api';
+import type { Id } from '../../convex/_generated/dataModel';
 
 type Tab = 'api' | 'widget' | 'webhooks' | 'branding' | 'sso';
 
@@ -353,6 +356,7 @@ function WidgetTab({ integration, update }: { integration: IntegrationSettings; 
     greeting: integration.widget_greeting ?? 'Hi! How can we help?',
     color: integration.widget_color,
     name: integration.name,
+    locale: integration.locale,
   });
 
   const copy = () => {
@@ -413,8 +417,16 @@ function WidgetTab({ integration, update }: { integration: IntegrationSettings; 
             <label className="text-sm font-medium text-neutral-700 mb-1.5 block">Welcome Greeting</label>
             <input type="text" value={integration.widget_greeting ?? ''} onChange={(e) => update({ widget_greeting: e.target.value })} className="input" placeholder="Hi! How can we help you today?" />
           </div>
+          <div>
+            <label className="text-sm font-medium text-neutral-700 mb-1.5 block">Widget locale</label>
+            <select className="input" value={integration.locale ?? 'en'} onChange={(e) => update({ locale: e.target.value })}>
+              {['en', 'es', 'fr', 'de', 'pt', 'ja'].map((loc) => <option key={loc} value={loc}>{loc}</option>)}
+            </select>
+            <p className="text-xs text-neutral-400 mt-1">Override per embed with <code>data-locale</code>.</p>
+          </div>
         </div>
       </SectionCard>
+      <CampaignsCard tenantId={integration.tenant_id} integrationId={integration.id} />
     </div>
   );
 }
@@ -569,7 +581,13 @@ function BrandingTab({ integration, update }: { integration: IntegrationSettings
             <div>
               <label className="text-sm font-medium text-neutral-700 mb-1.5 block">Custom Domain</label>
               <input type="text" value={integration.custom_domain ?? ''} onChange={(e) => update({ custom_domain: e.target.value || null })} className="input" placeholder="help.yourcompany.com" />
+              <p className="text-xs text-neutral-400 mt-1">Point a CNAME at this app. Visitors on that host see this help center.</p>
             </div>
+          </div>
+          <div>
+            <label className="text-sm font-medium text-neutral-700 mb-1.5 block">Inbound support email</label>
+            <input type="email" value={integration.inbound_email_address ?? ''} onChange={(e) => update({ inbound_email_address: e.target.value || null })} className="input" placeholder="support@inbound.yourdomain.com" />
+            <p className="text-xs text-neutral-400 mt-1">Forward Resend inbound to {convexSiteUrl}/email/inbound. Matching To: addresses become tickets.</p>
           </div>
         </div>
       </SectionCard>
@@ -598,10 +616,10 @@ function BrandingTab({ integration, update }: { integration: IntegrationSettings
 function SsoTab({ integration, update }: { integration: IntegrationSettings; update: (p: Partial<IntegrationSettings>) => Promise<void> }) {
   return (
     <div className="space-y-5">
-      <SectionCard icon={ShieldCheck} title="SAML 2.0 Single Sign-On" description="Configure SSO so your agents can sign in with your identity provider.">
+      <SectionCard icon={ShieldCheck} title="SSO for console login" description="Google OIDC is live on the Webwi login page when AUTH_GOOGLE_ID is set. Store your IdP issuer or metadata URL here for the workspace record.">
         <ToggleRow
           label="SSO Enabled"
-          description="Enable SAML 2.0 authentication for agent login"
+          description="Mark this workspace as using SSO. Sign-in uses Google or a deployment-wide OIDC provider."
           value={integration.sso_enabled}
           onChange={(v) => update({ sso_enabled: v })}
         />
@@ -611,16 +629,16 @@ function SsoTab({ integration, update }: { integration: IntegrationSettings; upd
               <label className="text-sm font-medium text-neutral-700 mb-1.5 block">Identity Provider</label>
               <select value={integration.sso_provider ?? ''} onChange={(e) => update({ sso_provider: e.target.value || null })} className="input">
                 <option value="">Select provider</option>
-                <option value="okta">Okta</option>
-                <option value="azure-ad">Azure AD (Microsoft Entra)</option>
+                <option value="okta">Okta (OIDC)</option>
+                <option value="azure-ad">Microsoft Entra (OIDC)</option>
                 <option value="google">Google Workspace</option>
-                <option value="custom">Custom SAML</option>
+                <option value="custom">Custom OIDC</option>
               </select>
             </div>
             <div>
-              <label className="text-sm font-medium text-neutral-700 mb-1.5 block">IdP Metadata URL</label>
-              <input type="url" value={integration.sso_metadata_url ?? ''} onChange={(e) => update({ sso_metadata_url: e.target.value || null })} className="input" placeholder="https://your-idp.com/saml/metadata" />
-              <p className="text-xs text-neutral-400 mt-2">Metadata is stored on this integration. SAML login is not wired yet — save the URL now so it can be connected later.</p>
+              <label className="text-sm font-medium text-neutral-700 mb-1.5 block">OIDC issuer or metadata URL</label>
+              <input type="url" value={integration.sso_metadata_url ?? ''} onChange={(e) => update({ sso_metadata_url: e.target.value || null })} className="input" placeholder="https://your-idp.com/.well-known/openid-configuration" />
+              <p className="text-xs text-neutral-400 mt-2">Console login uses AUTH_GOOGLE_* or AUTH_OIDC_* on the Convex deployment. This field stores the workspace IdP URL for enterprise review.</p>
             </div>
             <div className="flex items-center gap-2 p-3 rounded-lg bg-neutral-50">
               {integration.sso_provider ? (
@@ -726,5 +744,54 @@ function SecurityTip({ text }: { text: string }) {
       <CheckCircle2 className="w-4 h-4 text-success-500 flex-shrink-0 mt-0.5" />
       <p className="text-sm text-neutral-600">{text}</p>
     </div>
+  );
+}
+
+function CampaignsCard({ tenantId, integrationId }: { tenantId: string; integrationId: string }) {
+  const { toast } = useToast();
+  const rows = useQuery(api.campaigns.list, { tenantId: tenantId as Id<'tenants'> });
+  const create = useMutation(api.campaigns.create);
+  const toggle = useMutation(api.campaigns.update);
+  const remove = useMutation(api.campaigns.remove);
+  const [title, setTitle] = useState('Need a hand?');
+  const [body, setBody] = useState('Chat with us — we usually reply in a few minutes.');
+
+  return (
+    <SectionCard icon={Code2} title="Proactive in-app message" description="Shown once in the widget until the visitor dismisses it.">
+      <div className="space-y-3">
+        {(rows ?? []).map((row) => (
+          <div key={row.id} className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium text-neutral-800">{row.title}</p>
+              <p className="text-xs text-neutral-400">{row.body}</p>
+            </div>
+            <div className="flex gap-2">
+              <button className="btn-secondary text-xs" onClick={() => void toggle({ tenantId: tenantId as Id<'tenants'>, campaignId: row.id, enabled: !row.enabled })}>
+                {row.enabled ? 'On' : 'Off'}
+              </button>
+              <button className="btn-ghost text-danger-500" onClick={() => void remove({ tenantId: tenantId as Id<'tenants'>, campaignId: row.id })}>
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        ))}
+        <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title" />
+        <textarea className="input resize-none" rows={2} value={body} onChange={(e) => setBody(e.target.value)} />
+        <button
+          className="btn-primary"
+          onClick={async () => {
+            await create({
+              tenantId: tenantId as Id<'tenants'>,
+              title,
+              body,
+              integrationId: integrationId as Id<'integrationSettings'>,
+            });
+            toast('Campaign saved', 'success');
+          }}
+        >
+          Add message
+        </button>
+      </div>
+    </SectionCard>
   );
 }

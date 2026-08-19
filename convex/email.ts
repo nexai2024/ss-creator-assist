@@ -10,7 +10,7 @@ export const send = internalAction({
   returns: v.object({ sent: v.boolean() }),
   handler: async (_ctx, args) => {
     const key = process.env.AUTH_RESEND_KEY;
-    const from = process.env.AUTH_EMAIL_FROM ?? "MSE Console <noreply@mse.local>";
+    const from = process.env.AUTH_EMAIL_FROM ?? "Webwi <noreply@webwi.red>";
     if (!key) {
       console.warn("AUTH_RESEND_KEY is not set; skipping email to", args.to);
       return { sent: false };

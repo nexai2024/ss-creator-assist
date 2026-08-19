@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { CreditCard, Check, Zap, Star, Crown, Download, AlertCircle } from 'lucide-react';
 import type { Tenant } from '@/types';
@@ -22,23 +22,25 @@ export function BillingPage({ tenant }: { tenant: Tenant | null }) {
   const [portalLoading, setPortalLoading] = useState(false);
   const checkout = useAction(api.billing.createCheckoutSession);
   const openPortal = useAction(api.billing.createPortalSession);
+  const stripeInvoices = useAction(api.billing.listInvoices);
   const billing = useQuery(
     api.billing.checkoutContext,
     tenant ? { tenantId: tenant.id as Id<'tenants'> } : 'skip',
   );
-  const logs = useQuery(
-    api.dashboard.billingAudit,
-    tenant ? { tenantId: tenant.id as Id<'tenants'> } : 'skip',
-  );
-  const invoices = (logs ?? []).map((log) => {
-    const parts = (log.details ?? '').split('|');
-    return {
-      id: log.entity_id ?? log.id,
-      amount: Number(parts[0] ?? 0),
-      date: log.created_at,
-      status: parts[1] ?? 'paid',
-    };
-  });
+  const [invoices, setInvoices] = useState<Array<{
+    id: string;
+    number: string | null;
+    amount: number;
+    status: string;
+    created: number;
+    hosted_invoice_url: string | null;
+    invoice_pdf: string | null;
+  }>>([]);
+
+  useEffect(() => {
+    if (!tenant) return;
+    void stripeInvoices({ tenantId: tenant.id as Id<'tenants'> }).then(setInvoices).catch(() => setInvoices([]));
+  }, [tenant, stripeInvoices]);
 
   const handleUpgrade = async (newPlan: string) => {
     if (!tenant || newPlan === tenant.plan_tier) return;
@@ -234,22 +236,26 @@ export function BillingPage({ tenant }: { tenant: Tenant | null }) {
         </div>
         {invoices.length === 0 ? (
           <div className="px-5 py-8 text-center">
-            <p className="text-sm text-neutral-400">No invoices yet. Invoices appear after your first billing cycle.</p>
+            <p className="text-sm text-neutral-400">No Stripe invoices yet. They appear after the first paid invoice.</p>
           </div>
         ) : (
           <div className="divide-y divide-neutral-50">
             {invoices.map((inv) => (
               <div key={inv.id} className="flex items-center justify-between px-5 py-3">
                 <div>
-                  <p className="text-sm font-medium text-neutral-700">INV-{inv.id.slice(-6).toUpperCase()}</p>
-                  <p className="text-xs text-neutral-400">{new Date(inv.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+                  <p className="text-sm font-medium text-neutral-700">{inv.number ?? inv.id.slice(-8)}</p>
+                  <p className="text-xs text-neutral-400">{inv.created ? new Date(inv.created).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : ''}</p>
                 </div>
                 <div className="flex items-center gap-3">
                   <span className="text-sm font-medium text-neutral-700">${inv.amount.toFixed(2)}</span>
                   <span className="badge bg-success-50 text-success-700">{inv.status}</span>
-                  <button onClick={() => toast('Invoice download started', 'success')} className="p-1.5 rounded-lg text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700">
-                    <Download className="w-4 h-4" />
-                  </button>
+                  {inv.hosted_invoice_url ? (
+                    <a href={inv.hosted_invoice_url} target="_blank" rel="noreferrer" className="p-1.5 rounded-lg text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700">
+                      <Download className="w-4 h-4" />
+                    </a>
+                  ) : (
+                    <span className="p-1.5 text-neutral-300"><Download className="w-4 h-4" /></span>
+                  )}
                 </div>
               </div>
             ))}

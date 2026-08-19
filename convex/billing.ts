@@ -293,6 +293,57 @@ export const createPortalSession = action({
   },
 });
 
+export const listInvoices = action({
+  args: { tenantId: v.id("tenants") },
+  returns: v.array(v.object({
+    id: v.string(),
+    number: v.union(v.string(), v.null()),
+    amount: v.number(),
+    currency: v.string(),
+    status: v.string(),
+    created: v.number(),
+    hosted_invoice_url: v.union(v.string(), v.null()),
+    invoice_pdf: v.union(v.string(), v.null()),
+  })),
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+    const billing = await ctx.runQuery(internal.billing.billingCustomer, { tenantId: args.tenantId });
+    if (!billing.stripeCustomerId || !process.env.STRIPE_SECRET_KEY) return [];
+    const res = await fetch(
+      `https://api.stripe.com/v1/invoices?customer=${encodeURIComponent(billing.stripeCustomerId)}&limit=24`,
+      { headers: { Authorization: `Bearer ${process.env.STRIPE_SECRET_KEY}` } },
+    );
+    if (!res.ok) {
+      console.error("Stripe invoices failed", res.status, await res.text());
+      return [];
+    }
+    const data = await res.json() as {
+      data?: Array<{
+        id: string;
+        number?: string | null;
+        amount_paid?: number;
+        amount_due?: number;
+        currency?: string;
+        status?: string;
+        created?: number;
+        hosted_invoice_url?: string | null;
+        invoice_pdf?: string | null;
+      }>;
+    };
+    return (data.data ?? []).map((inv) => ({
+      id: inv.id,
+      number: inv.number ?? null,
+      amount: (inv.amount_paid || inv.amount_due || 0) / 100,
+      currency: (inv.currency ?? "usd").toUpperCase(),
+      status: inv.status ?? "open",
+      created: (inv.created ?? 0) * 1000,
+      hosted_invoice_url: inv.hosted_invoice_url ?? null,
+      invoice_pdf: inv.invoice_pdf ?? null,
+    }));
+  },
+});
+
 export const assertBillingAdmin = query({
   args: { tenantId: v.id("tenants") },
   returns: v.null(),

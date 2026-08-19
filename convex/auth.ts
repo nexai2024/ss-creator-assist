@@ -1,11 +1,12 @@
 import { Email } from "@convex-dev/auth/providers/Email";
+import Google from "@auth/core/providers/google";
 import { Password } from "@convex-dev/auth/providers/Password";
 import { convexAuth } from "@convex-dev/auth/server";
 import { acceptInviteForUser, provisionWorkspace } from "./lib/workspace";
 
 async function sendResendEmail(to: string, subject: string, html: string) {
   const key = process.env.AUTH_RESEND_KEY;
-  const from = process.env.AUTH_EMAIL_FROM ?? "MSE Console <noreply@mse.local>";
+  const from = process.env.AUTH_EMAIL_FROM ?? "Webwi <noreply@webwi.red>";
   if (!key) {
     throw new Error("AUTH_RESEND_KEY is not set on the Convex deployment");
   }
@@ -35,6 +36,21 @@ type SignupProfile = {
   image?: string;
 };
 
+function oidcProvider() {
+  const issuer = process.env.AUTH_OIDC_ISSUER;
+  const clientId = process.env.AUTH_OIDC_ID;
+  const clientSecret = process.env.AUTH_OIDC_SECRET;
+  if (!issuer || !clientId || !clientSecret) return null;
+  return {
+    id: "oidc",
+    name: process.env.AUTH_OIDC_NAME ?? "SSO",
+    type: "oidc" as const,
+    issuer,
+    clientId,
+    clientSecret,
+  };
+}
+
 export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
   providers: [
     Password({
@@ -43,7 +59,7 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
         async sendVerificationRequest({ identifier, url }) {
           await sendResendEmail(
             identifier,
-            "Reset your MSE Console password",
+            "Reset your Webwi password",
             `<p>Use this link to choose a new password:</p><p><a href="${url}">Reset password</a></p>`,
           );
         },
@@ -61,6 +77,8 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
         } as { email: string; name?: string };
       },
     }),
+    Google,
+    ...[oidcProvider()].filter((p): p is NonNullable<typeof p> => p !== null),
   ],
   callbacks: {
     // Runs inside the signup mutation, before a JWT exists on the client.

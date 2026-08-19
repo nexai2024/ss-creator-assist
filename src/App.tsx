@@ -5,6 +5,7 @@ import { AuthPage, UpdatePasswordPage } from '@/pages/AuthPage';
 import { CreateWorkspacePage } from '@/pages/CreateWorkspacePage';
 import { DashboardPage } from '@/pages/DashboardPage';
 import { TicketsPage } from '@/pages/TicketsPage';
+import { InboxPage } from '@/pages/InboxPage';
 import { ChatPage } from '@/pages/ChatPage';
 import { KnowledgePage } from '@/pages/KnowledgePage';
 import { GdprPage } from '@/pages/GdprPage';
@@ -15,7 +16,7 @@ import { OnboardingPage } from '@/pages/OnboardingPage';
 import { RoutingRulesPage } from '@/pages/RoutingRulesPage';
 import { BillingPage } from '@/pages/BillingPage';
 import { TeamPage } from '@/pages/TeamPage';
-import { InboxPage } from '@/pages/InboxPage';
+import { ReportsPage } from '@/pages/ReportsPage';
 import { SavedRepliesPage } from '@/pages/SavedRepliesPage';
 import { SoloSettingsPage } from '@/pages/SoloSettingsPage';
 import { HelpArticlePage, HelpCenterHomePage, HelpContactPage } from '@/pages/HelpCenterPage';
@@ -28,6 +29,8 @@ import { canManageBilling, canManageIntegrations, canManageRouting, canManageTea
 import { useFollowUps, useSoloSettings } from '@/hooks/useSolopreneur';
 import { convexConfigured } from '@/lib/convex';
 import type { Tenant } from '@/types';
+import { useQuery } from 'convex/react';
+import { api } from '../convex/_generated/api';
 
 type ConsoleContextValue = {
   tenant: Tenant | null;
@@ -125,6 +128,11 @@ function ConsoleLayout() {
 function DashboardRoute() {
   const { tenant, tenants } = useConsole();
   return <DashboardPage tenant={tenant} tenants={tenants} />;
+}
+
+function ReportsRoute() {
+  const { tenant } = useConsole();
+  return <ReportsPage tenant={tenant} />;
 }
 
 function InboxRoute() {
@@ -250,6 +258,40 @@ export default function App() {
     );
   }
 
+  return <AppRoutes />;
+}
+
+function isProductAppHost(host: string): boolean {
+  if (host === 'localhost' || host === '127.0.0.1') return true;
+  if (host.endsWith('.localhost')) return true;
+  if (host.endsWith('.convex.cloud') || host.endsWith('.convex.site')) return true;
+  if (host.endsWith('.vercel.app')) return true;
+  if (host === 'webwi.red' || host.endsWith('.webwi.red')) return true;
+  const app = import.meta.env.VITE_PUBLIC_APP_URL as string | undefined;
+  if (app) {
+    try { return new URL(app).hostname === host; } catch { return false; }
+  }
+  return false;
+}
+
+function AppRoutes() {
+  const host = window.location.hostname;
+  const custom = useQuery(api.public.helpCenterByHost, isProductAppHost(host) ? 'skip' : { host });
+  if (!isProductAppHost(host)) {
+    if (custom === undefined) return <FullPageLoader />;
+    if (custom) {
+      return (
+        <Routes>
+          <Route path="/" element={<HelpCenterHomePage slugOverride={custom.slug} />} />
+          <Route path="/contact" element={<HelpContactPage slugOverride={custom.slug} />} />
+          <Route path="/ticket/:ticketId" element={<TicketStatusPage />} />
+          <Route path="/ticket" element={<TicketStatusPage />} />
+          <Route path="/:articleSlug" element={<HelpArticlePage slugOverride={custom.slug} />} />
+        </Routes>
+      );
+    }
+  }
+
   return (
     <Routes>
       <Route path="/help/:slug" element={<HelpCenterHomePage />} />
@@ -264,6 +306,7 @@ export default function App() {
       <Route element={<ConsoleLayout />}>
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard" element={<DashboardRoute />} />
+        <Route path="/reports" element={<ReportsRoute />} />
         <Route path="/inbox" element={<InboxRoute />} />
         <Route path="/tickets" element={<TicketsRoute />} />
         <Route path="/tickets/:ticketId" element={<TicketsRoute />} />

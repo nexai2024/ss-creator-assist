@@ -1,8 +1,11 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { classifyTicket, isoReq, shapeArticle, shapeChatMessage, slaHours } from "./lib/shape";
+import { isoReq, shapeArticle, shapeChatMessage } from "./lib/shape";
 import { consumeRateLimit } from "./lib/rateLimit";
 import { notifyTicketCreated } from "./lib/notifyTicket";
+import { insertOpenTicket } from "./lib/insertTicket";
+import { searchArticles } from "./lib/retrieve";
+import { normalizeHost } from "./lib/hosts";
 import { articleValidator, chatMessageValidator } from "./lib/validators";
 import type { Doc } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
@@ -69,6 +72,56 @@ export const helpCenter = query({
         description: c.description ?? null,
       })),
     };
+  },
+});
+
+export const helpCenterByHost = query({
+  args: { host: v.string() },
+  returns: v.union(
+    v.object({
+      slug: v.string(),
+    }),
+    v.null(),
+  ),
+  handler: async (ctx, args) => {
+    const host = normalizeHost(args.host);
+    if (!host) return null;
+    const integration = await ctx.db
+      .query("integrationSettings")
+      .withIndex("by_custom_domain", (q) => q.eq("customDomain", host))
+      .first();
+    if (!integration || integration.status === "inactive") return null;
+    const tenant = await ctx.db.get(integration.tenantId);
+    return tenant ? { slug: tenant.slug } : null;
+  },
+});
+
+export const searchArticlesPublic = query({
+  args: { slug: v.string(), needle: v.string() },
+  returns: v.array(v.object({
+    id: v.id("kbArticles"),
+    title: v.string(),
+    slug: v.string(),
+    content: v.string(),
+    category_id: v.union(v.id("kbCategories"), v.null()),
+    views: v.number(),
+    helpful_votes: v.number(),
+    updated_at: v.string(),
+  })),
+  handler: async (ctx, args) => {
+    const tenant = await ctx.db.query("tenants").withIndex("by_slug", (q) => q.eq("slug", args.slug)).unique();
+    if (!tenant) return [];
+    const rows = await searchArticles(ctx, tenant._id, args.needle, "published", 20);
+    return rows.map((a) => ({
+      id: a._id,
+      title: a.title,
+      slug: a.slug,
+      content: a.content,
+      category_id: a.categoryId ?? null,
+      views: a.views,
+      helpful_votes: a.helpfulVotes,
+      updated_at: new Date(a.updatedAt).toISOString(),
+    }));
   },
 });
 
@@ -140,25 +193,15 @@ export const submitTicket = mutation({
     const tenant = await ctx.db.query("tenants").withIndex("by_slug", (q) => q.eq("slug", args.slug)).unique();
     if (!tenant) throw new Error("Help center not found");
     await consumeRateLimit(ctx, `submitTicket:${tenant._id}:${args.email.toLowerCase()}`, 5, 10 * 60_000);
-    const classified = classifyTicket(args.subject, args.body);
-    const ticketId = await ctx.db.insert("tickets", {
+    const ticketId = await insertOpenTicket(ctx, {
       tenantId: tenant._id,
       subject: args.subject,
-      category: args.category ?? classified.category,
-      priority: "medium",
-      status: "open",
+      category: args.category,
       customerName: args.name,
       customerEmail: args.email,
-      deflectionSuggested: classified.deflectionSuggested,
-      customFields: {},
+      body: args.body,
+      source: "help_center",
       tags: ["help-center"],
-      slaDeadline: Date.now() + slaHours("medium") * 3600000,
-    });
-    await ctx.db.insert("ticketMessages", {
-      ticketId,
-      senderType: "end_user",
-      senderName: args.name,
-      content: args.body,
     });
     await notifyTicketCreated(ctx, {
       tenantId: tenant._id,
@@ -189,6 +232,8 @@ const publicTicketValidator = v.object({
   tenant_slug: v.string(),
   branding_color: v.string(),
   can_reply: v.boolean(),
+  csat_score: v.union(v.number(), v.null()),
+  can_csat: v.boolean(),
   messages: v.array(publicTicketMessage),
 });
 
@@ -218,6 +263,8 @@ async function publicTicketView(
     tenant_slug: tenant?.slug ?? "",
     branding_color: integration?.brandingPrimaryColor ?? "#3b82f6",
     can_reply: ticket.status !== "closed",
+    csat_score: ticket.csatScore ?? null,
+    can_csat: (ticket.status === "resolved" || ticket.status === "closed") && ticket.csatScore === undefined,
     messages: rows.map((m) => ({
       id: m._id,
       sender_type: m.senderType,
@@ -282,6 +329,35 @@ export const replyToTicket = mutation({
   },
 });
 
+export const submitCsat = mutation({
+  args: {
+    ticketId: v.string(),
+    email: v.string(),
+    rating: v.number(),
+    comment: v.optional(v.string()),
+  },
+  returns: publicTicketValidator,
+  handler: async (ctx, args) => {
+    await consumeRateLimit(ctx, `csat:${args.ticketId.slice(0, 48)}`, 5, 10 * 60_000);
+    const ticket = await ticketForCustomer(ctx, args.ticketId, args.email);
+    if (!ticket) throw new Error("Ticket not found");
+    if (ticket.status !== "resolved" && ticket.status !== "closed") {
+      throw new Error("Rate the ticket after it is resolved");
+    }
+    if (ticket.csatScore !== undefined) throw new Error("This ticket already has a rating");
+    const rating = Math.max(1, Math.min(5, Math.round(args.rating)));
+    await ctx.db.insert("ticketFeedback", {
+      ticketId: ticket._id,
+      rating,
+      comment: args.comment,
+      submittedBy: args.email.trim().toLowerCase(),
+    });
+    await ctx.db.patch(ticket._id, { csatScore: rating });
+    const updated = await ctx.db.get(ticket._id);
+    return await publicTicketView(ctx, updated!);
+  },
+});
+
 export const widgetConfig = query({
   args: { integrationId: v.string() },
   returns: v.union(
@@ -296,6 +372,15 @@ export const widgetConfig = query({
       is_open: v.boolean(),
       auto_responder_enabled: v.boolean(),
       auto_responder_message: v.string(),
+      locale: v.string(),
+      campaign: v.union(
+        v.object({
+          id: v.id("campaigns"),
+          title: v.string(),
+          body: v.string(),
+        }),
+        v.null(),
+      ),
     }),
     v.null(),
   ),
@@ -307,6 +392,8 @@ export const widgetConfig = query({
     const tenant = await ctx.db.get(integration.tenantId);
     if (!tenant) return null;
     const solo = await ctx.db.query("soloSettings").withIndex("by_tenant", (q) => q.eq("tenantId", tenant._id)).unique();
+    const campaigns = await ctx.db.query("campaigns").withIndex("by_tenant", (q) => q.eq("tenantId", tenant._id)).take(20);
+    const campaign = campaigns.find((c) => c.enabled && (!c.integrationId || c.integrationId === integration._id)) ?? null;
     return {
       integration_id: integration._id,
       tenant_id: tenant._id,
@@ -318,6 +405,8 @@ export const widgetConfig = query({
       is_open: true,
       auto_responder_enabled: solo?.autoResponderEnabled ?? false,
       auto_responder_message: solo?.autoResponderMessage ?? "",
+      locale: integration.locale ?? "en",
+      campaign: campaign ? { id: campaign._id, title: campaign.title, body: campaign.body } : null,
     };
   },
 });
@@ -455,11 +544,7 @@ export const suggestedArticles = query({
   args: { tenantId: v.id("tenants"), needle: v.string() },
   returns: v.array(articleValidator),
   handler: async (ctx, args) => {
-    const articles = await ctx.db
-      .query("kbArticles")
-      .withIndex("by_tenant_and_status", (q) => q.eq("tenantId", args.tenantId).eq("status", "published"))
-      .take(50);
-    const n = args.needle.toLowerCase().slice(0, 40);
-    return articles.filter((a) => a.title.toLowerCase().includes(n) || a.content.toLowerCase().includes(n)).slice(0, 3).map(shapeArticle);
+    const rows = await searchArticles(ctx, args.tenantId, args.needle, "published", 3);
+    return rows.map(shapeArticle);
   },
 });

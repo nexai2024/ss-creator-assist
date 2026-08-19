@@ -23,6 +23,9 @@ import { Customer360Modal } from '@/components/Customer360Modal';
 import { LoadingSpinner, EmptyState, ErrorState, TableSkeleton } from '@/components/States';
 import { useToast } from '@/components/Toast';
 import { Star, Zap, CheckCircle2 } from 'lucide-react';
+import { AttachButton, AttachmentList } from '@/components/AttachButton';
+import { CopilotBox } from '@/components/CopilotBox';
+import { usePresence } from '@/hooks/usePresence';
 import { useMutation, usePaginatedQuery, useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import type { Id } from '../../convex/_generated/dataModel';
@@ -277,6 +280,12 @@ function TicketDetail({
   const [minutes, setMinutes] = useState('15');
   const [followAt, setFollowAt] = useState('');
   const { toast } = useToast();
+  const others = usePresence({
+    tenantId: ticket.tenant_id,
+    entityType: 'ticket',
+    entityId: ticket.id,
+    typing: reply.length > 0,
+  });
   const tenantInfo = tenants.find((t) => t.id === ticket.tenant_id);
   const isVip = profile?.is_vip ?? false;
   const msgLoading = messageRows === undefined;
@@ -338,6 +347,11 @@ function TicketDetail({
         <div className="lg:col-span-2 card flex flex-col" style={{ minHeight: '500px' }}>
           <div className="px-5 py-4 border-b border-neutral-100">
             <h2 className="text-lg font-semibold text-neutral-900">{ticket.subject}</h2>
+            {others.length > 0 && (
+              <p className="text-xs text-primary-600 mt-1">
+                {others.map((p) => p.display_name).join(', ')} viewing{others.some((p) => p.typing) ? ' · typing' : ''}
+              </p>
+            )}
             <div className="flex items-center gap-2 mt-2">
               <PriorityBadge priority={ticket.priority} />
               <StatusBadge status={ticket.status} />
@@ -393,6 +407,7 @@ function TicketDetail({
 
           {ticket.status !== 'closed' && (
             <div className="px-5 py-4 border-t border-neutral-100">
+              <AttachmentList tenantId={ticket.tenant_id} entityType="ticket" entityId={ticket.id} />
               {showSavedReplies && (
                 <div className="mb-2 p-3 rounded-lg bg-neutral-50 border border-neutral-100 max-h-40 overflow-y-auto scrollbar-thin">
                   <p className="text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-2">Saved Replies</p>
@@ -418,6 +433,7 @@ function TicketDetail({
                 <button onClick={() => setShowSavedReplies(!showSavedReplies)} className="btn-secondary self-end" title="Saved replies">
                   <Zap className="w-4 h-4" />
                 </button>
+                <AttachButton tenantId={ticket.tenant_id} entityType="ticket" entityId={ticket.id} />
                 <button onClick={handleSendReply} disabled={!reply.trim() || sending} className="btn-primary self-end">
                   <Send className="w-4 h-4" />
                 </button>
@@ -497,6 +513,12 @@ function TicketDetail({
               }}>Record refund</button>
             )}
           </div>
+
+          <CopilotBox
+            tenantId={ticket.tenant_id}
+            ticketId={ticket.id}
+            onInsert={(text) => setReply(text)}
+          />
 
           <div className="card p-5">
             <h3 className="text-sm font-semibold text-neutral-800 mb-3">Assignment</h3>

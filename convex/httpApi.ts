@@ -1,10 +1,10 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
-import { classifyTicket, shapeTicket, shapeTicketMessage, slaHours } from "./lib/shape";
-import { applyRouting } from "./lib/routing";
-import { consumeRateLimit } from "./lib/rateLimit";
+import { classifyTicket, shapeTicket, shapeTicketMessage } from "./lib/shape";
 import { notifyTicketCreated } from "./lib/notifyTicket";
+import { insertOpenTicket } from "./lib/insertTicket";
+import { consumeRateLimit } from "./lib/rateLimit";
 import { sha256Hex } from "./lib/secrets";
 import { ticketMessageValidator, ticketValidator } from "./lib/validators";
 import type { Id } from "./_generated/dataModel";
@@ -89,28 +89,17 @@ export const createTicket = internalMutation({
     const classified = classifyTicket(args.subject, args.body ?? "");
     const category = args.category || classified.category;
     const priority = args.priority ?? "medium";
-    const ticketId = await ctx.db.insert("tickets", {
+    const ticketId = await insertOpenTicket(ctx, {
       tenantId: args.tenantId,
       subject: args.subject,
       category,
       priority,
-      status: "open",
       customerName: args.customerName,
       customerEmail: args.customerEmail,
-      deflectionSuggested: classified.deflectionSuggested,
-      customFields: {},
+      body: args.body,
+      source: "api",
       tags: ["api"],
-      slaDeadline: Date.now() + slaHours(priority) * 3600000,
     });
-    if (args.body) {
-      await ctx.db.insert("ticketMessages", {
-        ticketId,
-        senderType: "end_user",
-        senderName: args.customerName,
-        content: args.body,
-      });
-    }
-    await applyRouting(ctx, args.tenantId, ticketId, args.subject, category, priority);
     await notifyTicketCreated(ctx, {
       tenantId: args.tenantId,
       ticketId,

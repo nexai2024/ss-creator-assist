@@ -1,7 +1,10 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { requireCapability, requireMember, slugify, writeAudit } from "./lib/auth";
 import { shapeArticle, shapeCategory } from "./lib/shape";
+import { articleSearchText } from "./lib/hosts";
+import { searchArticles } from "./lib/retrieve";
 import { articleValidator, categoryValidator } from "./lib/validators";
 
 export const list = query({
@@ -42,7 +45,11 @@ export const create = mutation({
       helpfulVotes: 0,
       unhelpfulVotes: 0,
       updatedAt: Date.now(),
+      searchText: articleSearchText(args.title, args.content),
     });
+    if (args.status === "published") {
+      await ctx.scheduler.runAfter(0, internal.ai.embedArticle, { articleId: id });
+    }
     await writeAudit(ctx, {
       tenantId: args.tenantId,
       action: "kb_article_created",
@@ -61,12 +68,22 @@ export const suggested = query({
   returns: v.array(articleValidator),
   handler: async (ctx, args) => {
     await requireMember(ctx, args.tenantId);
-    const articles = await ctx.db
-      .query("kbArticles")
-      .withIndex("by_tenant_and_status", (q) => q.eq("tenantId", args.tenantId).eq("status", "published"))
-      .take(50);
-    const n = args.needle.toLowerCase().slice(0, 40);
-    return articles.filter((a) => a.title.toLowerCase().includes(n) || a.content.toLowerCase().includes(n)).slice(0, 3).map(shapeArticle);
+    const rows = await searchArticles(ctx, args.tenantId, args.needle, "published", 5);
+    return rows.map(shapeArticle);
+  },
+});
+
+export const search = query({
+  args: {
+    tenantId: v.id("tenants"),
+    needle: v.string(),
+    status: v.optional(v.union(v.literal("published"), v.literal("draft"))),
+  },
+  returns: v.array(articleValidator),
+  handler: async (ctx, args) => {
+    await requireMember(ctx, args.tenantId);
+    const rows = await searchArticles(ctx, args.tenantId, args.needle, args.status, 20);
+    return rows.map(shapeArticle);
   },
 });
 
@@ -86,14 +103,21 @@ export const update = mutation({
     const publishing = args.status === "published" && article.status !== "published";
     if (publishing) await requireCapability(ctx, args.tenantId, "kb:publish");
     else await requireCapability(ctx, args.tenantId, "kb:edit");
+    const title = args.title ?? article.title;
+    const content = args.content ?? article.content;
+    const status = args.status ?? article.status;
     await ctx.db.patch(args.articleId, {
-      title: args.title ?? article.title,
-      content: args.content ?? article.content,
-      status: args.status ?? article.status,
+      title,
+      content,
+      status,
       categoryId: args.categoryId === undefined ? article.categoryId : args.categoryId ?? undefined,
       slug: args.title ? slugify(args.title) : article.slug,
       updatedAt: Date.now(),
+      searchText: articleSearchText(title, content),
     });
+    if (status === "published") {
+      await ctx.scheduler.runAfter(0, internal.ai.embedArticle, { articleId: args.articleId });
+    }
     const updated = await ctx.db.get(args.articleId);
     return shapeArticle(updated!);
   },

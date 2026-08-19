@@ -41,6 +41,7 @@ export type Ticket = {
   deflection_suggested: boolean;
   custom_fields: Record<string, string>;
   tags: string[] | null;
+  source?: 'console' | 'help_center' | 'chat' | 'email' | 'api';
 };
 
 export type TicketMessage = {
@@ -132,6 +133,8 @@ export type IntegrationSettings = {
   sso_enabled: boolean;
   sso_provider: string | null;
   sso_metadata_url: string | null;
+  inbound_email_address: string | null;
+  locale: string;
   onboarding_completed: boolean;
   onboarding_step: number;
   created_at: string;

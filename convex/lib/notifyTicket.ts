@@ -1,7 +1,7 @@
 import type { MutationCtx } from "../_generated/server";
 import type { Id } from "../_generated/dataModel";
 import { internal } from "../_generated/api";
-import { ticketCreatedMail, ticketReplyMail } from "./ticketEmail";
+import { ticketCreatedMail, ticketReplyMail, ticketStatusMail } from "./ticketEmail";
 
 async function tenantName(ctx: MutationCtx, tenantId: Id<"tenants">): Promise<string> {
   const tenant = await ctx.db.get(tenantId);
@@ -48,6 +48,30 @@ export async function notifyTicketReply(
     tenantName: await tenantName(ctx, args.tenantId),
     subject: args.subject,
     content: args.content,
+    ticketId: args.ticketId,
+    email: to,
+  });
+  await ctx.scheduler.runAfter(0, internal.email.send, { to, ...mail });
+}
+
+export async function notifyTicketStatusChange(
+  ctx: MutationCtx,
+  args: {
+    tenantId: Id<"tenants">;
+    ticketId: Id<"tickets">;
+    email: string;
+    customerName: string;
+    subject: string;
+    status: string;
+  },
+) {
+  const to = args.email.trim();
+  if (!to.includes("@")) return;
+  const mail = ticketStatusMail({
+    customerName: args.customerName,
+    tenantName: await tenantName(ctx, args.tenantId),
+    subject: args.subject,
+    status: args.status,
     ticketId: args.ticketId,
     email: to,
   });

@@ -15,21 +15,28 @@ export function KnowledgePage({ tenant, tenants }: { tenant: Tenant | null; tena
   const categories = (kb?.categories ?? []) as KbCategory[];
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const searched = useQuery(
+    api.knowledge.search,
+    tenant && search.trim().length >= 2
+      ? {
+          tenantId: tenant.id as Id<'tenants'>,
+          needle: search.trim(),
+          status: statusFilter === 'all' ? undefined : statusFilter as 'published' | 'draft',
+        }
+      : 'skip',
+  );
   const [selectedArticle, setSelectedArticle] = useState<KbArticle | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const loading = Boolean(tenant) && kb === undefined;
   const error = null;
 
   const filtered = useMemo(() => {
-    return articles.filter((a) => {
+    const pool = search.trim().length >= 2 && searched ? searched as KbArticle[] : articles;
+    return pool.filter((a) => {
       if (statusFilter !== 'all' && a.status !== statusFilter) return false;
-      if (search) {
-        const s = search.toLowerCase();
-        return a.title.toLowerCase().includes(s) || a.content.toLowerCase().includes(s);
-      }
       return true;
     });
-  }, [articles, search, statusFilter]);
+  }, [articles, search, statusFilter, searched]);
 
   if (loading) return <div className="flex items-center justify-center py-24"><LoadingSpinner size={32} /></div>;
   if (error) return <ErrorState message={error} />;

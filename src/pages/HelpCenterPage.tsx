@@ -6,6 +6,7 @@ import { useMutation, useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { ticketPublicPath } from '../../convex/lib/chatContent';
 import type { Id } from '../../convex/_generated/dataModel';
+import { t } from '@/lib/i18n';
 
 type HelpCenterPayload = {
   tenant: { id: string; name: string; slug: string };
@@ -37,6 +38,7 @@ type ArticlePayload = {
 
 export function HelpCenterLayout({ children, data }: { children: ReactNode; data: HelpCenterPayload }) {
   const color = data.branding.primary_color || '#3b82f6';
+  const locale = new URLSearchParams(window.location.search).get('locale');
   return (
     <div className="min-h-screen bg-neutral-50">
       <header className="border-b border-neutral-200 bg-white">
@@ -51,17 +53,17 @@ export function HelpCenterLayout({ children, data }: { children: ReactNode; data
             )}
             <div className="min-w-0">
               <p className="text-sm font-semibold text-neutral-900 truncate">{data.tenant.name}</p>
-              <p className="text-xs text-neutral-400">Help Center</p>
+              <p className="text-xs text-neutral-400">{t(locale, 'help')}</p>
             </div>
           </Link>
           <div className="flex items-center gap-2 flex-shrink-0">
             <Link to="/ticket" className="btn-secondary text-sm">
               <Ticket className="w-4 h-4" />
-              Check ticket
+              {t(locale, 'ticket')}
             </Link>
             <Link to={`/help/${data.tenant.slug}/contact`} className="btn-secondary text-sm">
               <LifeBuoy className="w-4 h-4" />
-              Contact support
+              {t(locale, 'contact')}
             </Link>
           </div>
         </div>
@@ -71,34 +73,39 @@ export function HelpCenterLayout({ children, data }: { children: ReactNode; data
   );
 }
 
-export function HelpCenterHomePage() {
-  const { slug } = useParams();
+export function HelpCenterHomePage({ slugOverride }: { slugOverride?: string } = {}) {
+  const { slug: paramSlug } = useParams();
+  const slug = slugOverride ?? paramSlug;
   const data = useQuery(api.public.helpCenter, slug ? { slug } : 'skip') as HelpCenterPayload | null | undefined;
   const [search, setSearch] = useState('');
   const [categoryId, setCategoryId] = useState('all');
+  const searched = useQuery(
+    api.public.searchArticlesPublic,
+    slug && search.trim().length >= 2 ? { slug, needle: search.trim() } : 'skip',
+  );
 
   const error = data === null ? 'This help center is not available.' : null;
+  const locale = new URLSearchParams(window.location.search).get('locale');
 
   const filtered = useMemo(() => {
     if (!data) return [];
-    return data.articles.filter((a) => {
+    const base = searched && search.trim().length >= 2 ? searched : data.articles;
+    return base.filter((a) => {
       if (categoryId !== 'all' && a.category_id !== categoryId) return false;
-      if (!search) return true;
-      const s = search.toLowerCase();
-      return a.title.toLowerCase().includes(s) || a.content.toLowerCase().includes(s);
+      return true;
     });
-  }, [data, search, categoryId]);
+  }, [data, search, categoryId, searched]);
 
   if (error) return <div className="p-8"><ErrorState message={error} /></div>;
   if (!data) return <FullPagePublicLoader />;
 
   return (
     <HelpCenterLayout data={data}>
-      <h1 className="text-2xl font-bold text-neutral-900 mb-1">How can we help?</h1>
+      <h1 className="text-2xl font-bold text-neutral-900 mb-1">{t(locale, 'howHelp')}</h1>
       <p className="text-sm text-neutral-500 mb-6">Search published articles from {data.tenant.name}.</p>
       <div className="relative mb-4">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
-        <input className="input pl-10" placeholder="Search articles..." value={search} onChange={(e) => setSearch(e.target.value)} />
+        <input className="input pl-10" placeholder={t(locale, 'search')} value={search} onChange={(e) => setSearch(e.target.value)} />
       </div>
       {data.categories.length > 0 && (
         <div className="flex flex-wrap gap-2 mb-6">
@@ -124,8 +131,9 @@ export function HelpCenterHomePage() {
   );
 }
 
-export function HelpArticlePage() {
-  const { slug, articleSlug } = useParams();
+export function HelpArticlePage({ slugOverride }: { slugOverride?: string } = {}) {
+  const { slug: paramSlug, articleSlug } = useParams();
+  const slug = slugOverride ?? paramSlug;
   const center = useQuery(api.public.helpCenter, slug ? { slug } : 'skip') as HelpCenterPayload | null | undefined;
   const loadArticle = useMutation(api.public.article);
   const voteMut = useMutation(api.public.voteArticle);
@@ -173,8 +181,9 @@ export function HelpArticlePage() {
   );
 }
 
-export function HelpContactPage() {
-  const { slug } = useParams();
+export function HelpContactPage({ slugOverride }: { slugOverride?: string } = {}) {
+  const { slug: paramSlug } = useParams();
+  const slug = slugOverride ?? paramSlug;
   const navigate = useNavigate();
   const center = useQuery(api.public.helpCenter, slug ? { slug } : 'skip') as HelpCenterPayload | null | undefined;
   const submitTicket = useMutation(api.public.submitTicket);

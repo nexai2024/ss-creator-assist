@@ -1,5 +1,6 @@
 import { type ReactNode } from 'react';
 import { Loader2 } from 'lucide-react';
+import { WebwiMark } from '@/components/WebwiMark';
 
 export function LoadingSpinner({ size = 24 }: { size?: number }) {
   return <Loader2 className="animate-spin text-primary-500" style={{ width: size, height: size }} />;
@@ -9,8 +10,9 @@ export function FullPageLoader() {
   return (
     <div className="flex items-center justify-center min-h-screen bg-neutral-50">
       <div className="flex flex-col items-center gap-3">
-        <LoadingSpinner size={32} />
-        <p className="text-sm text-neutral-500 font-medium">Loading...</p>
+        <WebwiMark size={40} />
+        <LoadingSpinner size={20} />
+        <p className="text-sm text-neutral-500 font-medium">Loading Webwi</p>
       </div>
     </div>
   );

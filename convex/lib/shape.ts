@@ -57,6 +57,7 @@ export function shapeTicket(t: Doc<"tickets">) {
     deflection_suggested: t.deflectionSuggested,
     custom_fields: t.customFields,
     tags: t.tags,
+    source: t.source ?? "console",
   };
 }
 
@@ -147,6 +148,8 @@ export function shapeIntegration(i: Doc<"integrationSettings">) {
     sso_enabled: i.ssoEnabled,
     sso_provider: i.ssoProvider ?? null,
     sso_metadata_url: i.ssoMetadataUrl ?? null,
+    inbound_email_address: i.inboundEmailAddress ?? null,
+    locale: i.locale ?? "en",
     onboarding_completed: i.onboardingCompleted,
     onboarding_step: i.onboardingStep,
     created_at: isoReq(i._creationTime),

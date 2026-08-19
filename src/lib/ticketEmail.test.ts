@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { escapeHtml, ticketCreatedMail, ticketReplyMail } from '../../convex/lib/ticketEmail';
+import { escapeHtml, ticketCreatedMail, ticketReplyMail, ticketStatusMail } from '../../convex/lib/ticketEmail';
 
 describe('ticket customer emails', () => {
   it('escapes HTML in customer-facing copy', () => {
@@ -32,6 +32,20 @@ describe('ticket customer emails', () => {
     expect(mail.html).toContain('Alex &lt;agent&gt;');
     expect(mail.html).toContain('Try again.<br/>Let us know.');
     expect(mail.html).toContain('View ticket and reply');
+    expect(mail.html).toContain('/ticket/tkt_99?email=jane%40example.com');
+  });
+
+  it('notifies the customer when status changes', () => {
+    const mail = ticketStatusMail({
+      customerName: 'Jane',
+      tenantName: 'Acme',
+      subject: 'Export failed',
+      status: 'resolved',
+      ticketId: 'tkt_99',
+      email: 'jane@example.com',
+    });
+    expect(mail.subject).toContain('resolved');
+    expect(mail.html).toContain('is now <strong>resolved</strong>');
     expect(mail.html).toContain('/ticket/tkt_99?email=jane%40example.com');
   });
 });

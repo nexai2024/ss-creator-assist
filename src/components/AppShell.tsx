@@ -24,16 +24,19 @@ import {
   Inbox,
   Settings,
   MessageCircle,
+  BarChart3,
 } from 'lucide-react';
 import type { Tenant, RoleTier } from '@/types';
 import { PlanBadge, StatusBadge } from '@/components/Badges';
 import { canManageBilling, ROLE_DISPLAY } from '@/lib/permissions';
+import { WebwiMark } from '@/components/WebwiMark';
 
-export type PageId = 'dashboard' | 'tickets' | 'chat' | 'knowledge' | 'gdpr' | 'tenants' | 'integrations' | 'integration-detail' | 'new-integration' | 'routing' | 'pricing' | 'billing' | 'team' | 'inbox' | 'saved-replies' | 'solo-settings';
+export type PageId = 'dashboard' | 'tickets' | 'chat' | 'knowledge' | 'gdpr' | 'tenants' | 'integrations' | 'integration-detail' | 'new-integration' | 'routing' | 'pricing' | 'billing' | 'team' | 'inbox' | 'saved-replies' | 'solo-settings' | 'reports';
 export type ViewMode = 'tenant' | 'admin';
 
 const navItems: { id: PageId; label: string; icon: typeof LayoutDashboard; adminOnly?: boolean }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { id: 'reports', label: 'Reports', icon: BarChart3 },
   { id: 'inbox', label: 'Unified Inbox', icon: Inbox },
   { id: 'tickets', label: 'Tickets', icon: Ticket },
   { id: 'chat', label: 'Live Chat', icon: MessageSquare },
@@ -117,13 +120,11 @@ export function AppShell({
         {/* Logo */}
         <div className="flex items-center justify-between px-5 h-16 border-b border-neutral-100">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center shadow-sm">
-              <svg viewBox="0 0 24 24" className="w-5 h-5 text-white" fill="none" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-              </svg>
-            </div>
+            <WebwiMark size={36} />
             <div>
-              <p className="text-sm font-bold text-neutral-900 leading-tight">MSE Console</p>
+              <p className="text-sm font-bold tracking-tight text-neutral-900 leading-tight">
+                Webw<span className="text-accent-500">i</span>
+              </p>
               <p className="text-[11px] text-neutral-400 leading-tight">
                 {isAdmin ? 'Admin Overview' : 'Support Center'}
               </p>

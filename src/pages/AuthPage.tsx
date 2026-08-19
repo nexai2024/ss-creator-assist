@@ -3,9 +3,13 @@ import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { Loader2, ArrowRight, Mail, Building2, UserPlus } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { FullPageLoader } from '@/components/States';
+import { WebwiWordmark } from '@/components/WebwiMark';
+import { useQuery } from 'convex/react';
+import { api } from '../../convex/_generated/api';
 
 export function AuthPage() {
-  const { signIn, signUp, acceptInvite, resetPassword, session, loading: authLoading, tenants } = useAuth();
+  const { signIn, signInOAuth, signUp, acceptInvite, resetPassword, session, loading: authLoading, tenants } = useAuth();
+  const methods = useQuery(api.users.authMethods);
   const navigate = useNavigate();
   const params = new URLSearchParams(window.location.search);
   const initialMode = params.get('invite') ? 'invite' : 'signin';
@@ -57,16 +61,8 @@ export function AuthPage() {
   return (
     <div className="min-h-screen bg-neutral-50 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
-        <div className="flex items-center justify-center gap-3 mb-8">
-          <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center shadow-sm">
-            <svg viewBox="0 0 24 24" className="w-6 h-6 text-white" fill="none" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-            </svg>
-          </div>
-          <div>
-            <h1 className="text-xl font-bold text-neutral-900">MSE Console</h1>
-            <p className="text-xs text-neutral-400">Multi-tenant Support Engine</p>
-          </div>
+        <div className="flex items-center justify-center mb-8">
+          <WebwiWordmark subtitle="Support that lives on your site" />
         </div>
 
         <div className="card p-8">
@@ -125,6 +121,22 @@ export function AuthPage() {
 
             {error && <div className="px-4 py-3 rounded-lg bg-danger-50 text-danger-700 text-sm">{error}</div>}
             {info && <div className="px-4 py-3 rounded-lg bg-success-50 text-success-700 text-sm">{info}</div>}
+
+            {mode !== 'reset' && mode !== 'invite' && (methods?.google || methods?.oidc) && (
+              <div className="space-y-2">
+                {methods.google && (
+                  <button type="button" className="btn-secondary w-full justify-center" onClick={() => void signInOAuth('google')}>
+                    Continue with Google
+                  </button>
+                )}
+                {methods.oidc && (
+                  <button type="button" className="btn-secondary w-full justify-center" onClick={() => void signInOAuth('oidc')}>
+                    Continue with {methods.oidc_name}
+                  </button>
+                )}
+                <p className="text-center text-xs text-neutral-400">or</p>
+              </div>
+            )}
 
             <button type="submit" disabled={loading} className="btn-primary w-full justify-center">
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}

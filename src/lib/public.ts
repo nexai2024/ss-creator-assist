@@ -41,8 +41,9 @@ export function widgetSnippet(opts: {
   greeting: string;
   color?: string;
   name?: string;
+  locale?: string;
 }): string {
-  const label = opts.name ? `MSE Chat Widget: ${opts.name}` : 'MSE Chat Widget';
+  const label = opts.name ? `Webwi Chat: ${opts.name}` : 'Webwi Chat';
   const origin = opts.origin.replace(/\/$/, '');
   const attrs = [
     `src="${origin}/mse-widget.js"`,
@@ -52,6 +53,7 @@ export function widgetSnippet(opts: {
     `data-origin=${JSON.stringify(origin)}`,
   ];
   if (opts.color) attrs.push(`data-color=${JSON.stringify(opts.color)}`);
+  if (opts.locale) attrs.push(`data-locale=${JSON.stringify(opts.locale)}`);
   return `<!-- ${label} — paste before </body> -->
 <script ${attrs.join('\n        ')}
         defer></script>`;

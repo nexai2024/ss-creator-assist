@@ -41,6 +41,13 @@ export const ticketValidator = v.object({
   deflection_suggested: v.boolean(),
   custom_fields: v.record(v.string(), v.string()),
   tags: v.array(v.string()),
+  source: v.union(
+    v.literal("console"),
+    v.literal("help_center"),
+    v.literal("chat"),
+    v.literal("email"),
+    v.literal("api"),
+  ),
 });
 
 export const ticketMessageValidator = v.object({
@@ -130,6 +137,8 @@ export const integrationValidator = v.object({
   sso_enabled: v.boolean(),
   sso_provider: v.union(v.string(), v.null()),
   sso_metadata_url: v.union(v.string(), v.null()),
+  inbound_email_address: v.union(v.string(), v.null()),
+  locale: v.string(),
   onboarding_completed: v.boolean(),
   onboarding_step: v.number(),
   created_at: v.string(),

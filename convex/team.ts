@@ -92,7 +92,7 @@ export const invite = mutation({
     const site = process.env.SITE_URL ?? "http://localhost:5173";
     await ctx.scheduler.runAfter(0, internal.email.send, {
       to: args.email.toLowerCase(),
-      subject: "You're invited to MSE Console",
+      subject: "You're invited to Webwi",
       html: `<p>You've been invited as ${args.role}.</p><p><a href="${site}/login?invite=${token}&email=${encodeURIComponent(args.email)}">Accept invite</a></p><p>Already signed in? <a href="${site}/create-workspace?invite=${token}">Join from your account</a>.</p>`,
     });
     return token;

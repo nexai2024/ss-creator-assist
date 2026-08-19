@@ -85,7 +85,7 @@ export async function ensurePlanCatalog(secret: string): Promise<PlanCatalog> {
       continue;
     }
     const product = await stripePost<StripeProduct>(secret, "/products", new URLSearchParams({
-      name: `MSE Console ${PLAN_LABEL[plan]}`,
+      name: `Webwi ${PLAN_LABEL[plan]}`,
       "metadata[plan]": plan,
     }));
     const created = await stripePost<StripePrice>(secret, "/prices", new URLSearchParams({
@@ -111,7 +111,7 @@ export async function ensurePortalConfiguration(secret: string, catalog: PlanCat
   if (found) return found.id;
 
   const body = new URLSearchParams({
-    "business_profile[headline]": "MSE Console billing",
+    "business_profile[headline]": "Webwi billing",
     "features[invoice_history][enabled]": "true",
     "features[payment_method_update][enabled]": "true",
     "features[subscription_cancel][enabled]": "true",

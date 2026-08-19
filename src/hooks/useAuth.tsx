@@ -20,6 +20,7 @@ type AuthContextValue = {
   user: AuthUser | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
+  signInOAuth: (provider: 'google' | 'oidc') => Promise<{ error: string | null }>;
   signUp: (email: string, password: string, tenantName: string) => Promise<{ error: string | null }>;
   acceptInvite: (email: string, password: string, token: string) => Promise<{ error: string | null }>;
   joinInvite: (token: string) => Promise<{ error: string | null }>;
@@ -124,6 +125,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [authSignIn]);
 
+  const signInOAuth = useCallback(async (provider: 'google' | 'oidc') => {
+    try {
+      await authSignIn(provider);
+      return { error: null };
+    } catch (err) {
+      return { error: toError(err) };
+    }
+  }, [authSignIn]);
+
   const signUp = useCallback(async (email: string, password: string, tenantName: string) => {
     try {
       await authSignIn('password', { email, password, flow: 'signUp', tenantName });
@@ -205,7 +215,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   return (
     <AuthContext.Provider value={{
       session, user, loading,
-      signIn, signUp, acceptInvite, joinInvite, resetPassword, updatePassword, signOut, createWorkspace,
+      signIn, signInOAuth, signUp, acceptInvite, joinInvite, resetPassword, updatePassword, signOut, createWorkspace,
       tenants, activeTenant, setActiveTenant,
       currentRole: membership?.role ?? null,
       currentMembership: membership as TenantMember | null,

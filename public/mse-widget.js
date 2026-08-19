@@ -30,6 +30,7 @@
       position: cfg.position || attr(el, 'data-position') || 'bottom-right',
       color: cfg.color || attr(el, 'data-color') || '#3b82f6',
       origin: String(origin).replace(/\/$/, ''),
+      locale: cfg.locale || attr(el, 'data-locale') || '',
     };
   }
 
@@ -75,7 +76,7 @@
     frame.id = 'mse-widget-frame';
     frame.title = 'Support chat';
     frame.setAttribute('allow', 'clipboard-write');
-    frame.src = cfg.origin + '/widget/' + encodeURIComponent(cfg.integrationId);
+    frame.src = cfg.origin + '/widget/' + encodeURIComponent(cfg.integrationId) + (cfg.locale ? ('?locale=' + encodeURIComponent(cfg.locale)) : '');
     frame.style.cssText = [
       'position:fixed',
       'z-index:2147483001',
