@@ -20,6 +20,7 @@ import {
   PauseCircle,
   PlayCircle,
   AlertCircle,
+  Blocks,
 } from 'lucide-react';
 import type { IntegrationSettings } from '@/types';
 import { useIntegration } from '@/hooks/useIntegrationSettings';
@@ -33,7 +34,7 @@ import { useMutation, useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import type { Id } from '../../convex/_generated/dataModel';
 
-type Tab = 'api' | 'widget' | 'webhooks' | 'branding' | 'sso';
+type Tab = 'api' | 'widget' | 'webhooks' | 'branding' | 'sso' | 'apps';
 
 const TABS: { id: Tab; label: string; icon: typeof Key }[] = [
   { id: 'api', label: 'API Keys', icon: Key },
@@ -41,6 +42,7 @@ const TABS: { id: Tab; label: string; icon: typeof Key }[] = [
   { id: 'webhooks', label: 'Webhooks', icon: Webhook },
   { id: 'branding', label: 'Branding', icon: Palette },
   { id: 'sso', label: 'SSO & Security', icon: ShieldCheck },
+  { id: 'apps', label: 'Third-Party Apps', icon: Blocks },
 ];
 
 export function IntegrationPage({
@@ -160,6 +162,7 @@ export function IntegrationPage({
       {tab === 'webhooks' && <WebhooksTab integration={integration} update={update} rotateWebhookSecret={rotateWebhookSecret} />}
       {tab === 'branding' && <BrandingTab integration={integration} update={update} />}
       {tab === 'sso' && <SsoTab integration={integration} update={update} />}
+      {tab === 'apps' && <AppsTab integration={integration} update={update} />}
 
       <Modal open={showDelete} onClose={() => setShowDelete(false)} title="Delete Integration" size="sm">
         <div className="space-y-4">
@@ -793,5 +796,70 @@ function CampaignsCard({ tenantId, integrationId }: { tenantId: string; integrat
         </button>
       </div>
     </SectionCard>
+  );
+}
+
+/* --- Third-Party Apps Tab --- */
+function AppsTab({ integration, update }: { integration: IntegrationSettings; update: (p: Partial<IntegrationSettings>) => Promise<void> }) {
+  const stripeConnected = Boolean(integration.stripe_connected_account_id);
+  const shopifyConnected = Boolean(integration.shopify_store_domain);
+
+  return (
+    <div className="space-y-5">
+      <SectionCard icon={Blocks} title="Third-Party Apps" description="Connect other apps to see customer data directly in your inbox.">
+        <div className="space-y-6">
+          <div className="flex items-center justify-between p-4 border border-neutral-200 rounded-xl">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-[#635BFF] flex items-center justify-center text-white font-bold text-lg">S</div>
+              <div>
+                <h3 className="text-sm font-semibold text-neutral-900">Stripe</h3>
+                <p className="text-xs text-neutral-500">View customer subscriptions and payments.</p>
+              </div>
+            </div>
+            <button 
+              className={stripeConnected ? "btn-secondary" : "btn-primary"}
+              onClick={() => update({ stripe_connected_account_id: stripeConnected ? null : 'acct_mock123' })}
+            >
+              {stripeConnected ? 'Disconnect' : 'Connect'}
+            </button>
+          </div>
+
+          <div className="flex items-center justify-between p-4 border border-neutral-200 rounded-xl">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-[#95BF47] flex items-center justify-center text-white font-bold text-lg">S</div>
+              <div>
+                <h3 className="text-sm font-semibold text-neutral-900">Shopify</h3>
+                <p className="text-xs text-neutral-500">View customer recent orders and LTV.</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {!shopifyConnected && (
+                <input 
+                  type="text" 
+                  placeholder="your-store.myshopify.com" 
+                  className="input w-48"
+                  id="shopify-domain-input"
+                />
+              )}
+              <button 
+                className={shopifyConnected ? "btn-secondary" : "btn-primary"}
+                onClick={() => {
+                  if (shopifyConnected) {
+                    update({ shopify_store_domain: null, shopify_access_token: null });
+                  } else {
+                    const domain = (document.getElementById('shopify-domain-input') as HTMLInputElement)?.value;
+                    if (domain) {
+                      update({ shopify_store_domain: domain, shopify_access_token: 'shp_mock456' });
+                    }
+                  }
+                }}
+              >
+                {shopifyConnected ? 'Disconnect' : 'Connect'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </SectionCard>
+    </div>
   );
 }

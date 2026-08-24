@@ -20,7 +20,7 @@ type WidgetConfig = {
   auto_responder_enabled: boolean;
   auto_responder_message: string;
   locale: string;
-  campaign: { id: string; title: string; body: string } | null;
+  campaign: { id: string; title: string; body: string; triggerUrl?: string; triggerTimeSeconds?: number } | null;
 };
 
 type ChatMsg = {
@@ -50,6 +50,7 @@ export function WidgetPage() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dismissedCampaign, setDismissedCampaign] = useState(false);
+  const [campaignTriggered, setCampaignTriggered] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
 
   const messages = useQuery(
@@ -72,6 +73,26 @@ export function WidgetPage() {
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
+  useEffect(() => {
+    if (!config?.campaign) return;
+    const { triggerUrl, triggerTimeSeconds } = config.campaign;
+    const hostUrl = new URLSearchParams(window.location.search).get('href') || document.referrer;
+    if (triggerUrl && !hostUrl.includes(triggerUrl)) {
+      return;
+    }
+    const delay = (triggerTimeSeconds || 0) * 1000;
+    if (delay === 0) {
+      setCampaignTriggered(true);
+      return;
+    }
+    const timer = setTimeout(() => {
+      setCampaignTriggered(true);
+      // Optional: post message to parent to open widget if not open
+      window.parent.postMessage({ type: 'MSE_OPEN_WIDGET' }, '*');
+    }, delay);
+    return () => clearTimeout(timer);
+  }, [config?.campaign]);
+
   if (error || config === null) {
     return <div className="h-screen flex items-center justify-center p-4 text-sm text-neutral-500">{error ?? 'This chat widget is offline.'}</div>;
   }
@@ -82,7 +103,7 @@ export function WidgetPage() {
   const color = config.color || '#3b82f6';
   const locale = new URLSearchParams(window.location.search).get('locale') || config.locale;
   const campaignKey = config.campaign ? `mse-proactive-${config.campaign.id}` : '';
-  const showCampaign = Boolean(config.campaign) && !dismissedCampaign && (!campaignKey || !localStorage.getItem(campaignKey));
+  const showCampaign = Boolean(config.campaign) && campaignTriggered && !dismissedCampaign && (!campaignKey || !localStorage.getItem(campaignKey));
 
   const startChat = async (e: FormEvent) => {
     e.preventDefault();
@@ -185,6 +206,11 @@ export function WidgetPage() {
           <div className="p-3 border-t border-neutral-100 flex gap-2">
             <input className="input flex-1" value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') send(); }} placeholder={t(locale, 'typeMessage')} />
             <button className="btn-primary" onClick={send} disabled={sending} style={{ background: color }}><Send className="w-4 h-4" /></button>
+          </div>
+          <div className="pb-2 text-center">
+            <a href={`https://creatorassist.com/?ref=${config.tenant_slug}`} target="_blank" rel="noopener noreferrer" className="text-[10px] text-neutral-400 hover:text-neutral-600 transition-colors">
+              Powered by CreatorAssist
+            </a>
           </div>
         </>
       )}

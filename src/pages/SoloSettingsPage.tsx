@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Clock, Save, MessageCircle, User, ToggleLeft, ToggleRight, Info } from 'lucide-react';
+import { Clock, Save, MessageCircle, User, ToggleLeft, ToggleRight, Info, AlertCircle } from 'lucide-react';
 import type { Tenant } from '@/types';
 import { useBusinessHours, useSoloSettings } from '@/hooks/useSolopreneur';
 import { LoadingSpinner, EmptyState } from '@/components/States';
@@ -16,11 +16,12 @@ export function SoloSettingsPage({ tenant }: { tenant: Tenant | null }) {
   const soloMode = solo.solo_mode;
   const [draftMsg, setDraftMsg] = useState('');
 
-  const persistSolo = async (patch: { solo_mode?: boolean; auto_responder_enabled?: boolean; auto_responder_message?: string }) => {
+  const persistSolo = async (patch: { solo_mode?: boolean; auto_responder_enabled?: boolean; auto_responder_message?: string; velocity_threshold?: number | null }) => {
     await save({
       soloMode: patch.solo_mode,
       autoResponderEnabled: patch.auto_responder_enabled,
       autoResponderMessage: patch.auto_responder_message,
+      velocityThreshold: patch.velocity_threshold !== undefined ? (patch.velocity_threshold ?? undefined) : undefined,
     });
   };
 
@@ -147,6 +148,37 @@ export function SoloSettingsPage({ tenant }: { tenant: Tenant | null }) {
             </button>
           </div>
         )}
+      </div>
+
+      <div className="card p-5">
+        <div className="flex items-start justify-between mb-4">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-xl bg-danger-50 flex items-center justify-center">
+              <AlertCircle className="w-5 h-5 text-danger-500" />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-neutral-800">Burnout Protector</h3>
+              <p className="text-xs text-neutral-400 mt-0.5 max-w-md">Automatically enable the auto-responder if you receive too many messages in a short time.</p>
+            </div>
+          </div>
+        </div>
+        <div>
+          <label className="text-sm font-medium text-neutral-700 mb-1.5 block">Max tickets per hour before pausing</label>
+          <div className="flex gap-2">
+            <input 
+              type="number" 
+              value={solo.velocity_threshold ?? ''} 
+              onChange={(e) => persistSolo({ velocity_threshold: e.target.value ? Number(e.target.value) : null })}
+              placeholder="e.g. 5"
+              className="input w-32"
+            />
+            {solo.velocity_threshold ? (
+              <span className="text-xs text-success-600 self-center font-medium">Active</span>
+            ) : (
+              <span className="text-xs text-neutral-400 self-center">Disabled</span>
+            )}
+          </div>
+        </div>
       </div>
 
       <div className="flex items-start gap-3 p-4 rounded-xl bg-primary-50/30 border border-primary-100">

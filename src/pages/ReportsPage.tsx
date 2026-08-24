@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { BarChart3, Download } from 'lucide-react';
+import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import type { Tenant } from '@/types';
 import { EmptyState } from '@/components/States';
 import { useQuery } from 'convex/react';
@@ -24,6 +25,25 @@ export function ReportsPage({ tenant }: { tenant: Tenant | null }) {
     if (!report?.first_response_avg_ms) return '—';
     const hours = report.first_response_avg_ms / 3600000;
     return `${hours.toFixed(1)}h`;
+  }, [report]);
+
+  const volumeChartData = useMemo(() => {
+    if (!report) return [];
+    const map: Record<string, number> = {};
+    for (let i = days - 1; i >= 0; i--) {
+      const d = new Date(now - i * 24 * 3600_000);
+      map[d.toISOString().split('T')[0]] = 0;
+    }
+    for (const row of report.rows) {
+      const d = new Date(row.created_at).toISOString().split('T')[0];
+      if (map[d] !== undefined) map[d]++;
+    }
+    return Object.entries(map).map(([date, count]) => ({ date, count }));
+  }, [report, days, now]);
+
+  const sourceChartData = useMemo(() => {
+    if (!report) return [];
+    return Object.entries(report.volume_by_source || {}).map(([name, value]) => ({ name, value }));
   }, [report]);
 
   if (!tenant) {
@@ -89,14 +109,30 @@ export function ReportsPage({ tenant }: { tenant: Tenant | null }) {
       </div>
 
       <div className="card p-5">
-        <h2 className="text-sm font-semibold text-neutral-800 mb-3">Volume by source</h2>
-        <div className="flex flex-wrap gap-2">
-          {Object.entries(report?.volume_by_source ?? {}).map(([source, count]) => (
-            <span key={source} className="px-3 py-1.5 rounded-lg bg-neutral-100 text-sm text-neutral-700">
-              {source} · {count}
-            </span>
-          ))}
-          {!report && <p className="text-sm text-neutral-400">Loading…</p>}
+        <h2 className="text-sm font-semibold text-neutral-800 mb-4">Volume Over Time</h2>
+        <div className="h-64">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={volumeChartData}>
+              <XAxis dataKey="date" fontSize={12} tickFormatter={(str) => str.slice(5)} />
+              <YAxis fontSize={12} allowDecimals={false} />
+              <Tooltip labelStyle={{color: '#333'}} />
+              <Line type="monotone" dataKey="count" stroke="#3b82f6" strokeWidth={2} dot={false} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      <div className="card p-5">
+        <h2 className="text-sm font-semibold text-neutral-800 mb-4">Volume by Source</h2>
+        <div className="h-64">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={sourceChartData} layout="vertical" margin={{ left: 20 }}>
+              <XAxis type="number" fontSize={12} allowDecimals={false} />
+              <YAxis dataKey="name" type="category" fontSize={12} />
+              <Tooltip />
+              <Bar dataKey="value" fill="#8b5cf6" radius={[0, 4, 4, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
         </div>
       </div>
     </div>

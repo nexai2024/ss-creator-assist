@@ -182,9 +182,9 @@ export function useSoloSettings(tenantId: string | null) {
     tenantId ? { tenantId: tenantId as Id<'tenants'> } : 'skip',
   );
   const saveMut = useMutation(api.solopreneur.saveSolo);
-  const save = useCallback(async (patch: { soloMode?: boolean; autoResponderEnabled?: boolean; autoResponderMessage?: string }) => {
+  const save = useCallback(async (patch: { soloMode?: boolean; autoResponderEnabled?: boolean; autoResponderMessage?: string; velocityThreshold?: number }) => {
     if (!tenantId) return;
     await saveMut({ tenantId: tenantId as Id<'tenants'>, ...patch });
   }, [tenantId, saveMut]);
-  return { solo: solo ?? { solo_mode: false, auto_responder_enabled: false, auto_responder_message: '' }, loading: tenantId ? solo === undefined : false, save };
+  return { solo: solo ?? { solo_mode: false, auto_responder_enabled: false, auto_responder_message: '', velocity_threshold: null }, loading: tenantId ? solo === undefined : false, save };
 }

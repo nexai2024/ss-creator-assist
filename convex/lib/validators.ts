@@ -47,6 +47,8 @@ export const ticketValidator = v.object({
     v.literal("chat"),
     v.literal("email"),
     v.literal("api"),
+    v.literal("whatsapp"),
+    v.literal("instagram"),
   ),
 });
 
@@ -138,6 +140,9 @@ export const integrationValidator = v.object({
   sso_provider: v.union(v.string(), v.null()),
   sso_metadata_url: v.union(v.string(), v.null()),
   inbound_email_address: v.union(v.string(), v.null()),
+  stripe_connected_account_id: v.union(v.string(), v.null()),
+  shopify_store_domain: v.union(v.string(), v.null()),
+  shopify_access_token: v.union(v.string(), v.null()),
   locale: v.string(),
   onboarding_completed: v.boolean(),
   onboarding_step: v.number(),
@@ -186,7 +191,7 @@ export const routingRuleValidator = v.object({
   id: v.id("routingRules"),
   tenant_id: v.id("tenants"),
   name: v.string(),
-  condition_field: v.union(v.literal("category"), v.literal("priority"), v.literal("subject_keyword")),
+  condition_field: v.union(v.literal("category"), v.literal("priority"), v.literal("subject_keyword"), v.literal("is_vip"), v.literal("lifetime_value")),
   condition_value: v.string(),
   action: v.union(v.literal("assign_agent"), v.literal("set_priority"), v.literal("add_tag")),
   action_value: v.string(),

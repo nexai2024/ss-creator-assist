@@ -62,5 +62,23 @@ export async function insertOpenTicket(
   }
   await applyRouting(ctx, args.tenantId, ticketId, args.subject, category, priority);
   await applyWorkflows(ctx, args.tenantId, ticketId, "ticket_created");
+
+  const soloSettings = await ctx.db.query("soloSettings").withIndex("by_tenant", (q) => q.eq("tenantId", args.tenantId)).unique();
+  if (soloSettings && soloSettings.velocityThreshold && !soloSettings.autoResponderEnabled) {
+    const oneHourAgo = Date.now() - 3600_000;
+    const recentTickets = await ctx.db
+      .query("tickets")
+      .withIndex("by_tenant", (q) => q.eq("tenantId", args.tenantId))
+      .filter((q) => q.gte(q.field("_creationTime"), oneHourAgo))
+      .collect();
+    
+    if (recentTickets.length >= soloSettings.velocityThreshold) {
+      await ctx.db.patch(soloSettings._id, {
+        autoResponderEnabled: true,
+      });
+      // We could also notify the solopreneur here
+    }
+  }
+
   return ticketId;
 }

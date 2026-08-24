@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Inbox, Ticket as TicketIcon, MessageSquare, Search, AlertCircle } from 'lucide-react';
+import { Inbox, Ticket as TicketIcon, MessageSquare, Search, AlertCircle, MessageCircle, Instagram } from 'lucide-react';
 import type { Tenant, Ticket } from '@/types';
 import { LoadingSpinner, EmptyState, ErrorState } from '@/components/States';
 import { PriorityBadge, StatusBadge } from '@/components/Badges';
@@ -19,6 +19,7 @@ type InboxItem = {
   status: string;
   created_at: string;
   tenant_id: string;
+  source?: string;
 };
 
 export function InboxPage({ tenant }: { tenant: Tenant | null; tenants: Tenant[] }) {
@@ -41,7 +42,7 @@ export function InboxPage({ tenant }: { tenant: Tenant | null; tenants: Tenant[]
       id: t.id, type: 'ticket' as const, subject: t.subject,
       customer_name: t.customer_name, customer_email: t.customer_email,
       priority: t.priority as Ticket['priority'], status: t.status,
-      created_at: t.created_at, tenant_id: t.tenant_id,
+      created_at: t.created_at, tenant_id: t.tenant_id, source: t.source,
     }));
     const chatItems: InboxItem[] = (chats ?? []).map((c) => ({
       id: c.id, type: 'chat' as const, subject: `Chat with ${c.customer_name}`,
@@ -119,15 +120,21 @@ export function InboxPage({ tenant }: { tenant: Tenant | null; tenants: Tenant[]
       ) : (
         <div className="space-y-2">
           {filteredItems.map((item) => {
-            const Icon = item.type === 'ticket' ? TicketIcon : MessageSquare;
+            let Icon = item.type === 'ticket' ? TicketIcon : MessageSquare;
+            let iconBg = item.type === 'ticket' ? 'bg-primary-50 text-primary-600' : 'bg-accent-50 text-accent-600';
+            if (item.source === 'whatsapp') {
+              Icon = MessageCircle;
+              iconBg = 'bg-green-50 text-green-600';
+            } else if (item.source === 'instagram') {
+              Icon = Instagram;
+              iconBg = 'bg-pink-50 text-pink-600';
+            }
             const isOpen = item.status === 'open' || item.status === 'pending' || item.status === 'active' || item.status === 'waiting';
             const timeAgo = getTimeAgo(item.created_at);
             return (
               <div key={`${item.type}-${item.id}`} role="button" tabIndex={0} onClick={() => navigate(item.type === 'ticket' ? `/tickets/${item.id}` : `/chat/${item.id}`)} className={`card p-4 card-hover cursor-pointer ${!isOpen ? 'opacity-60' : ''}`}>
                 <div className="flex items-center gap-3">
-                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                    item.type === 'ticket' ? 'bg-primary-50 text-primary-600' : 'bg-accent-50 text-accent-600'
-                  }`}>
+                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${iconBg}`}>
                     <Icon className="w-5 h-5" />
                   </div>
                   <div className="flex-1 min-w-0">

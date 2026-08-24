@@ -369,7 +369,10 @@ export function ChatPage({ tenant }: { tenant: Tenant | null; tenants: Tenant[] 
                       <p className="text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-2">Saved Replies</p>
                       <div className="flex flex-wrap gap-1.5">
                         {savedReplies.map((sr) => (
-                          <button key={sr.id} onClick={() => { setReply(sr.content); setShowSavedReplies(false); incrementUsage(sr.id); toast('Reply inserted', 'success'); }}
+                          <button key={sr.id} onClick={() => { 
+                            const content = sr.content.replace(/\{\{customer\.name\}\}/gi, selected.customer_name).replace(/\{\{customer\.email\}\}/gi, selected.customer_email);
+                            setReply(content); setShowSavedReplies(false); incrementUsage(sr.id); toast('Reply inserted', 'success'); 
+                          }}
                             className="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-white border border-neutral-200 text-neutral-700 hover:border-primary-300 hover:bg-primary-50/30 transition-all">
                             {sr.shortcut ?? sr.title}
                           </button>

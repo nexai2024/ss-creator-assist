@@ -328,10 +328,18 @@ export const copilot = action({
         : "OPENAI_API_KEY is not set. Draft from the thread manually, or add the key to enable copilot.";
       return { text: fallback, similar: data.similar };
     }
+    let kbContext = "";
+    if (args.mode === "draft") {
+      const cards = await retrieveCards(ctx, args.tenantId, data.subject + " " + data.transcript);
+      if (cards.length > 0) {
+        kbContext = "\n\nRelevant Knowledge Base Articles:\n" + cards.map(c => `[${c.title}]: ${c.excerpt}`).join("\n");
+      }
+    }
+
     const prompt = args.mode === "summarize"
       ? "Summarize this support thread in 4 bullets: customer ask, what was tried, current status, suggested next step."
-      : "Draft a concise, professional agent reply. Do not invent policy. Use a helpful tone.";
-    const text = await chatComplete(prompt, `Subject: ${data.subject}\n\n${data.transcript}`)
+      : "Draft a concise, professional agent reply. Use the provided Knowledge Base Articles to ground your answer. Do not invent policy. Use a helpful tone.";
+    const text = await chatComplete(prompt, `Subject: ${data.subject}\n\n${data.transcript}${kbContext}`)
       ?? "Could not generate a suggestion right now.";
     return { text, similar: data.similar };
   },

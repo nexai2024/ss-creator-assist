@@ -396,13 +396,14 @@ export const solo = query({
     solo_mode: v.boolean(),
     auto_responder_enabled: v.boolean(),
     auto_responder_message: v.string(),
+    velocity_threshold: v.union(v.number(), v.null()),
   }),
   handler: async (ctx, args) => {
     await requireMember(ctx, args.tenantId);
     const row = await ctx.db.query("soloSettings").withIndex("by_tenant", (q) => q.eq("tenantId", args.tenantId)).unique();
     return row
-      ? { solo_mode: row.soloMode, auto_responder_enabled: row.autoResponderEnabled, auto_responder_message: row.autoResponderMessage }
-      : { solo_mode: false, auto_responder_enabled: false, auto_responder_message: "We're away right now. We'll reply during business hours." };
+      ? { solo_mode: row.soloMode, auto_responder_enabled: row.autoResponderEnabled, auto_responder_message: row.autoResponderMessage, velocity_threshold: row.velocityThreshold ?? null }
+      : { solo_mode: false, auto_responder_enabled: false, auto_responder_message: "We're away right now. We'll reply during business hours.", velocity_threshold: null };
   },
 });
 
@@ -412,23 +413,26 @@ export const saveSolo = mutation({
     soloMode: v.optional(v.boolean()),
     autoResponderEnabled: v.optional(v.boolean()),
     autoResponderMessage: v.optional(v.string()),
+    velocityThreshold: v.optional(v.number()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
     await requireMember(ctx, args.tenantId);
     const existing = await ctx.db.query("soloSettings").withIndex("by_tenant", (q) => q.eq("tenantId", args.tenantId)).unique();
     if (existing) {
-      await ctx.db.patch(existing._id, {
-        soloMode: args.soloMode ?? existing.soloMode,
-        autoResponderEnabled: args.autoResponderEnabled ?? existing.autoResponderEnabled,
-        autoResponderMessage: args.autoResponderMessage ?? existing.autoResponderMessage,
-      });
+      const patch: any = {};
+      if (args.soloMode !== undefined) patch.soloMode = args.soloMode;
+      if (args.autoResponderEnabled !== undefined) patch.autoResponderEnabled = args.autoResponderEnabled;
+      if (args.autoResponderMessage !== undefined) patch.autoResponderMessage = args.autoResponderMessage;
+      if (args.velocityThreshold !== undefined) patch.velocityThreshold = args.velocityThreshold;
+      await ctx.db.patch(existing._id, patch);
     } else {
       await ctx.db.insert("soloSettings", {
         tenantId: args.tenantId,
         soloMode: args.soloMode ?? false,
         autoResponderEnabled: args.autoResponderEnabled ?? false,
         autoResponderMessage: args.autoResponderMessage ?? "We're away right now.",
+        velocityThreshold: args.velocityThreshold,
       });
     }
     return null;

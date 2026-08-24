@@ -16,12 +16,23 @@ export async function applyRouting(
     tags?: string[];
   } = {};
   const ticket = await ctx.db.get(ticketId);
+  if (!ticket) return;
+
+  const profile = await ctx.db
+    .query("customerProfiles")
+    .withIndex("by_tenant_and_email", (q) => q.eq("tenantId", tenantId).eq("customerEmail", ticket.customerEmail))
+    .unique();
+
   const tags = [...(ticket?.tags ?? [])];
   for (const rule of rules.filter((r) => r.enabled).sort((a, b) => a.priority - b.priority)) {
     let matches = false;
     if (rule.conditionField === "category" && rule.conditionValue === category) matches = true;
     if (rule.conditionField === "priority" && rule.conditionValue === priority) matches = true;
     if (rule.conditionField === "subject_keyword" && subject.toLowerCase().includes(rule.conditionValue.toLowerCase())) matches = true;
+    
+    if (rule.conditionField === "is_vip" && profile?.isVip === (rule.conditionValue === "true")) matches = true;
+    if (rule.conditionField === "lifetime_value" && (profile?.lifetimeValue ?? 0) >= Number(rule.conditionValue)) matches = true;
+
     if (!matches) continue;
     if (rule.action === "assign_agent") updates.assignedAgentId = rule.actionValue as Id<"agents">;
     if (rule.action === "set_priority") updates.priority = rule.actionValue as "low" | "medium" | "high" | "urgent";

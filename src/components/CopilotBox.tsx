@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Sparkles } from 'lucide-react';
 import { useAction } from 'convex/react';
 import { api } from '../../convex/_generated/api';
@@ -20,6 +20,14 @@ export function CopilotBox({
   const [text, setText] = useState('');
   const [similar, setSimilar] = useState<Array<{ id: string; subject: string; status: string }>>([]);
   const [loading, setLoading] = useState<string | null>(null);
+  const autoDrafted = useRef(false);
+
+  useEffect(() => {
+    if (ticketId && !autoDrafted.current) {
+      autoDrafted.current = true;
+      void run('draft');
+    }
+  }, [ticketId]);
 
   const run = async (mode: 'draft' | 'summarize' | 'similar') => {
     setLoading(mode);

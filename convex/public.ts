@@ -375,9 +375,11 @@ export const widgetConfig = query({
       locale: v.string(),
       campaign: v.union(
         v.object({
-          id: v.id("campaigns"),
+          id: v.string(),
           title: v.string(),
           body: v.string(),
+          triggerUrl: v.optional(v.string()),
+          triggerTimeSeconds: v.optional(v.number()),
         }),
         v.null(),
       ),
@@ -406,7 +408,13 @@ export const widgetConfig = query({
       auto_responder_enabled: solo?.autoResponderEnabled ?? false,
       auto_responder_message: solo?.autoResponderMessage ?? "",
       locale: integration.locale ?? "en",
-      campaign: campaign ? { id: campaign._id, title: campaign.title, body: campaign.body } : null,
+      campaign: campaign ? { 
+        id: campaign._id, 
+        title: campaign.title, 
+        body: campaign.body,
+        triggerUrl: campaign.triggerUrl,
+        triggerTimeSeconds: campaign.triggerTimeSeconds 
+      } : null,
     };
   },
 });

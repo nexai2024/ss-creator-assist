@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Star, Ticket as TicketIcon, MessageSquare, X, Save, DollarSign, StickyNote } from 'lucide-react';
+import { Star, Ticket as TicketIcon, MessageSquare, X, Save, DollarSign, StickyNote, ShoppingBag, CreditCard } from 'lucide-react';
 import type { Tenant, Ticket, ChatConversation } from '@/types';
 import { useCustomerProfile } from '@/hooks/useSolopreneur';
 import { LoadingSpinner } from '@/components/States';
@@ -152,6 +152,34 @@ export function Customer360Modal({ tenant, email, name, onClose }: {
                     ))}
                   </div>
                 )}
+              </div>
+
+              <div>
+                <h3 className="text-sm font-semibold text-neutral-800 mb-3 mt-5">Third-Party Data</h3>
+                <div className="space-y-3">
+                  <div className="p-4 rounded-lg bg-white border border-neutral-200">
+                    <div className="flex items-center gap-2 mb-3">
+                      <CreditCard className="w-4 h-4 text-[#635BFF]" />
+                      <span className="text-sm font-semibold text-neutral-900">Stripe Subscriptions</span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-neutral-600">Pro Plan (Monthly)</span>
+                      <span className="font-medium text-success-600">Active</span>
+                    </div>
+                    <p className="text-xs text-neutral-400 mt-1">MRR: $29.00</p>
+                  </div>
+                  <div className="p-4 rounded-lg bg-white border border-neutral-200">
+                    <div className="flex items-center gap-2 mb-3">
+                      <ShoppingBag className="w-4 h-4 text-[#95BF47]" />
+                      <span className="text-sm font-semibold text-neutral-900">Shopify Orders</span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-neutral-600">Order #1042</span>
+                      <span className="font-medium text-neutral-900">$142.50</span>
+                    </div>
+                    <p className="text-xs text-neutral-400 mt-1">Fulfilled · 3 days ago</p>
+                  </div>
+                </div>
               </div>
             </>
           )}
