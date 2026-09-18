@@ -26,7 +26,7 @@ import { Star, Zap, CheckCircle2 } from 'lucide-react';
 import { AttachButton, AttachmentList } from '@/components/AttachButton';
 import { CopilotBox } from '@/components/CopilotBox';
 import { usePresence } from '@/hooks/usePresence';
-import { useMutation, usePaginatedQuery, useQuery } from 'convex/react';
+import { useAction, useMutation, usePaginatedQuery, useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import type { Id } from '../../convex/_generated/dataModel';
 
@@ -290,6 +290,20 @@ function TicketDetail({
   const isVip = profile?.is_vip ?? false;
   const msgLoading = messageRows === undefined;
 
+  const autoResolve = useAction(api.ai.autoResolveTicket);
+  const [autoResolving, setAutoResolving] = useState(false);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'r') {
+        e.preventDefault();
+        setShowSavedReplies((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   const handleSendReply = async () => {
     if (!reply.trim()) return;
     setSending(true);
@@ -305,6 +319,24 @@ function TicketDetail({
       toast('Failed to send reply', 'error');
     }
     setSending(false);
+  };
+
+  const handleAutoResolve = async () => {
+    setAutoResolving(true);
+    try {
+      const res = await autoResolve({
+        tenantId: ticket.tenant_id as Id<'tenants'>,
+        ticketId: ticket.id as Id<'tickets'>,
+      });
+      if (res.resolved) {
+        toast('Ticket auto-resolved by AI assistant!', 'success');
+      } else {
+        toast(res.reason, 'info');
+      }
+    } catch {
+      toast('AI auto-resolution failed', 'error');
+    }
+    setAutoResolving(false);
   };
 
   const handleStatusChange = async (status: Ticket['status']) => {
@@ -424,11 +456,46 @@ function TicketDetail({
                   </div>
                 </div>
               )}
+              <div className="mb-2 flex items-center gap-1.5 border-b border-neutral-100 pb-1.5">
+                <button
+                  type="button"
+                  onClick={() => setReply((r) => `${r} **bold**`)}
+                  className="px-2 py-0.5 text-xs font-bold text-neutral-600 hover:bg-neutral-100 rounded"
+                  title="Bold"
+                >
+                  B
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setReply((r) => `${r} *italic*`)}
+                  className="px-2 py-0.5 text-xs italic text-neutral-600 hover:bg-neutral-100 rounded"
+                  title="Italic"
+                >
+                  I
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setReply((r) => `${r} \`code\``)}
+                  className="px-2 py-0.5 text-xs font-mono text-neutral-600 hover:bg-neutral-100 rounded"
+                  title="Code"
+                >
+                  &lt;/&gt;
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setReply((r) => `${r} [link title](https://)`)}
+                  className="px-2 py-0.5 text-xs text-primary-600 hover:bg-neutral-100 rounded"
+                  title="Insert Link"
+                >
+                  Link
+                </button>
+              </div>
+
               <div className="flex gap-2">
                 <textarea
                   value={reply}
                   onChange={(e) => setReply(e.target.value)}
-                  placeholder="Type your reply..."
+                  placeholder="Type your reply... (Cmd+Enter to send, Cmd+Shift+R for saved replies)"
                   rows={2}
                   className="input flex-1 resize-none"
                   onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleSendReply(); }}
@@ -442,10 +509,20 @@ function TicketDetail({
                 </button>
               </div>
               <div className="flex items-center justify-between mt-2">
-                <p className="text-xs text-neutral-400">Press Cmd/Ctrl + Enter to send</p>
-                <button onClick={() => handleStatusChange('resolved')} className="text-xs text-success-600 hover:text-success-700 font-medium flex items-center gap-1">
-                  <CheckCircle2 className="w-3.5 h-3.5" /> One-click Resolve
-                </button>
+                <p className="text-xs text-neutral-400">Cmd+Enter to send · Cmd+Shift+R for templates</p>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={handleAutoResolve}
+                    disabled={autoResolving}
+                    className="text-xs text-violet-600 hover:text-violet-700 font-medium flex items-center gap-1"
+                  >
+                    <Zap className="w-3.5 h-3.5 text-violet-500" />
+                    {autoResolving ? 'AI Resolving…' : 'Auto-Resolve with AI'}
+                  </button>
+                  <button onClick={() => handleStatusChange('resolved')} className="text-xs text-success-600 hover:text-success-700 font-medium flex items-center gap-1">
+                    <CheckCircle2 className="w-3.5 h-3.5" /> One-click Resolve
+                  </button>
+                </div>
               </div>
             </div>
           )}

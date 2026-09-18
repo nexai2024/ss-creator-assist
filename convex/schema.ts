@@ -199,6 +199,8 @@ export default defineSchema({
     whatsappAccessToken: v.optional(v.string()),
     instagramAccountId: v.optional(v.string()),
     instagramAccessToken: v.optional(v.string()),
+    emailHeaderHtml: v.optional(v.string()),
+    emailFooterHtml: v.optional(v.string()),
     onboardingCompleted: v.boolean(),
     onboardingStep: v.number(),
     updatedAt: v.number(),

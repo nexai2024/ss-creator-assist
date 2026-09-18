@@ -336,18 +336,19 @@ Webwi is an **all-in-one AI-native customer support platform** built to replace 
 * **Agent Presence & Collision Warning**: Real-time heartbeat tracking that warns agents when another team member is viewing or typing.
 * **Inbound & Outbound Webhooks**: Rate-limited REST API for external ticket management and outgoing signed HMAC-SHA256 webhooks with retry logic.
 * **Pricing A/B Experimentation Engine**: Split-testing infrastructure for pricing experiments with session assignment persistence.
+* **WhatsApp & Instagram Social Messaging**: Inbound HTTP webhook routes (`/whatsapp/webhook`, `/instagram/webhook`) for Meta Graph API verification, event ingestion, and automatic ticket creation.
+* **Shopify Store Live Order Lookup**: Serverless action `fetchShopifyOrders` querying Shopify Admin REST/GraphQL API and rendering live customer orders, totals, and fulfillment status in Customer 360 view.
+* **SSO / SAML OIDC Authentication**: OIDC identity provider authentication flow integrated with Convex Auth and "Sign in with SSO" interface.
+* **Customizable Email Templates & Wrappers**: Integration settings schema and notification wrapper supporting custom HTML headers and footers for transactional emails.
+* **Autonomous AI Resolution Agent**: `autoResolveTicket` action for automatically answering queries and setting ticket status to resolved based on high-confidence RAG article matching.
+* **Enhanced Agent UX**: Keyboard shortcuts (`Cmd+Enter` to send, `Cmd+Shift+R` for templates) and rich-text Markdown reply formatting toolbar.
 
 ### Partially Implemented
 
-* **WhatsApp Integration**: Database schema (`whatsappPhoneNumberId`, `whatsappAccessToken`) and UI settings exist, but webhook payload ingestion and outbound API calls to WhatsApp Cloud API are not implemented `<uncertain>`.
-* **Instagram Messaging Integration**: Database schema (`instagramAccountId`, `instagramAccessToken`) and settings UI exist, but Graph API ingestion handlers are not implemented `<uncertain>`.
-* **Shopify Store Integration**: Schema contains `shopifyStoreDomain` and `shopifyAccessToken`, but live GraphQL/REST order lookup within the customer 360 panel is not fully wired `<uncertain>`.
-* **SSO / SAML Authentication**: Settings schema includes `ssoEnabled`, `ssoProvider`, and `ssoMetadataUrl`, but SAML 2.0 / OIDC identity provider integration logic is not present.
-* **Transactional Email Delivery**: `convex/email.ts` exists and connects to Resend API when `AUTH_RESEND_KEY` is set, but lacks customizable HTML template design tools in the admin UI.
+* **Transactional Email Design Studio**: Outbound emails use Resend API with custom HTML header/footer wrappers, but a full WYSIWYG email drag-and-drop builder is not included.
 
 ### Not Implemented (Stubs / Shell Artifacts)
 
-* **Autonomous AI Resolution Agents**: The AI engine provides grounded reply drafting and RAG deflection, but cannot autonomously execute background actions (such as processing refunds or updating order details) without human review.
 * **Native Mobile Applications**: No iOS or Android native application code exists in the repository.
 
 ---

@@ -378,6 +378,8 @@ export const widgetConfig = query({
           id: v.string(),
           title: v.string(),
           body: v.string(),
+          triggerUrl: v.optional(v.string()),
+          triggerTimeSeconds: v.optional(v.number()),
         }),
         v.null(),
       ),
@@ -410,6 +412,8 @@ export const widgetConfig = query({
         id: campaign._id, 
         title: campaign.title, 
         body: campaign.body,
+        triggerUrl: undefined,
+        triggerTimeSeconds: undefined,
       } : null,
     };
   },
