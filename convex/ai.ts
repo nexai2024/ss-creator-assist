@@ -6,7 +6,6 @@ import { articleSearchText } from "./lib/hosts";
 import { chatComplete, embedText, hasOpenAiKey } from "./lib/openai";
 import { encodeChatShare, excerptFrom } from "./lib/chatContent";
 import { keywordArticles } from "./lib/retrieve";
-import { shapeChatMessage } from "./lib/shape";
 import { chatMessageValidator } from "./lib/validators";
 import type { Id } from "./_generated/dataModel";
 

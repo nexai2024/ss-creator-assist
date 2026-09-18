@@ -420,7 +420,12 @@ export const saveSolo = mutation({
     await requireMember(ctx, args.tenantId);
     const existing = await ctx.db.query("soloSettings").withIndex("by_tenant", (q) => q.eq("tenantId", args.tenantId)).unique();
     if (existing) {
-      const patch: any = {};
+      const patch: {
+        soloMode?: boolean;
+        autoResponderEnabled?: boolean;
+        autoResponderMessage?: string;
+        velocityThreshold?: number;
+      } = {};
       if (args.soloMode !== undefined) patch.soloMode = args.soloMode;
       if (args.autoResponderEnabled !== undefined) patch.autoResponderEnabled = args.autoResponderEnabled;
       if (args.autoResponderMessage !== undefined) patch.autoResponderMessage = args.autoResponderMessage;
