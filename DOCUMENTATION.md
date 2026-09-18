@@ -1,504 +1,349 @@
-# Comprehensive Codebase Analysis & Product Documentation: Webwi (ss-creator-assist)
+# Internal Documentation
+
+## Table of Contents
+- [Overview](#overview)
+  - [System Purpose](#system-purpose)
+  - [High-Level Architecture](#high-level-architecture)
+- [Component Breakdown](#component-breakdown)
+  - [Database Schema (`convex/schema.ts`)](#database-schema-convexschemats)
+  - [AI Engine (`convex/ai.ts`)](#ai-engine-convexaits)
+  - [Ticketing Core (`convex/tickets.ts`)](#ticketing-core-convexticketsts)
+  - [Live Chat System (`convex/chat.ts`)](#live-chat-system-convexchatts)
+  - [Knowledge Base & Public Portal (`convex/knowledge.ts` & `convex/public.ts`)](#knowledge-base--public-portal-convexknowledgets--convexpublicts)
+  - [Billing & Stripe (`convex/billing.ts` & `convex/lib/stripeCatalog.ts`)](#billing--stripe-convexbillingts--convexlibstripecatalogts)
+  - [Workflows & Routing (`convex/workflows.ts` & `convex/lib/workflows.ts`)](#workflows--routing-convexworkflowsts--convexlibworkflowsts)
+  - [Solopreneur Tools (`convex/solopreneur.ts`)](#solopreneur-tools-convexsolopreneurts)
+  - [Integrations & HTTP Router (`convex/integrations.ts`, `convex/http.ts`, `convex/httpApi.ts`)](#integrations--http-router-convexintegrationsts-convexhttpts-convexhttpapits)
+  - [Presence & Collision (`convex/presence.ts`)](#presence--collision-convexpresencets)
+  - [GDPR & Compliance (`convex/gdpr.ts`)](#gdpr--compliance-convexgdprts)
+  - [Frontend SPA (`src/`)](#frontend-spa-src)
+- [Data Flow](#data-flow)
+  - [Flow 1: Inbound Ticket Creation & Automated Routing](#flow-1-inbound-ticket-creation--automated-routing)
+  - [Flow 2: Live Chat Message & AI Vector Deflection](#flow-2-live-chat-message--ai-vector-deflection)
+  - [Flow 3: External Webhook Delivery](#flow-3-external-webhook-delivery)
+  - [Flow 4: Stripe Webhook Billing Reconciliation](#flow-4-stripe-webhook-billing-reconciliation)
+- [Dependencies](#dependencies)
+  - [Runtime Dependencies](#runtime-dependencies)
+  - [External Cloud Services](#external-cloud-services)
+- [Key Functions/Classes](#key-functionsclasses)
+  - [`convex/ai.ts`: `copilot`](#convexaits-copilot)
+  - [`convex/lib/businessSla.ts`: `calculateSlaDeadline`](#convexlibbusinessslats-calculatesladeadline)
+  - [`convex/lib/workflows.ts`: `applyWorkflows`](#convexlibworkflowsts-applyworkflows)
+  - [`convex/lib/insertTicket.ts`: `insertTicketHelper`](#convexlibinsertticketts-inserttickethelper)
+  - [`convex/webhooks.ts`: `deliverWebhook`](#convexwebhooksts-deliverwebhook)
+  - [`convex/billing.ts`: `applyPaidPlan`](#convexbillingts-applypaidplan)
+- [Cross-Links](#cross-links)
 
 ---
 
-## 1. Overview
+## Overview
 
-**Webwi** (repository `ss-creator-assist`) is a full-stack, multi-tenant customer support platform designed for modern SaaS businesses, digital solopreneurs, and support teams. It unifies omnichannel ticketing (email, web forms, live chat, and REST API), AI-driven deflection and copilot assistance, self-service knowledge base management, automated ticket routing, workflow macros, team role-based access control (RBAC), and subscription management via Stripe into a real-time web application.
+### System Purpose
+Webwi (repository `ss-creator-assist`) is a full-stack, multi-tenant customer support platform. It consolidates omnichannel ticket management (email, web forms, live chat, and REST API), AI-driven deflection and copilot assistance, self-service knowledge bases, macro workflows, role-based access control (RBAC), and subscription billing into a single web application.
 
 ### High-Level Architecture
+The platform operates on a two-tier serverless architecture:
+1. **Client Tier**: Single Page Application (SPA) built with React 18, Vite, TypeScript, and Tailwind CSS. Client routing dynamically serves the internal agent console, public Help Center portals, or embedded live chat widgets based on URL hostname/slug.
+2. **Serverless Backend Tier**: Powered by Convex BaaS. Manages real-time WebSocket database subscriptions, serverless mutations and queries, scheduled background jobs, vector search indexes, HTTP endpoints, and authentication (`@convex-dev/auth`).
 
-The platform uses a two-tier serverless architecture featuring a React single-page application (SPA) on the frontend and a Convex backend-as-a-service (BaaS) providing real-time data persistence, reactive subscriptions, serverless mutations, actions, scheduled background jobs, vector search, HTTP endpoints, and authentication integration.
-
-```
-+-----------------------------------------------------------------------------------+
-|                                  Client Tier                                      |
-|                                                                                   |
-|  +-----------------------+    +------------------------+    +------------------+  |
-|  | Support Console App   |    | Public Help Center &   |    | Embeddable Chat  |  |
-|  | (React 18 + Vite +    |    | Customer Status Portal |    | Widget           |  |
-|  |  Tailwind CSS)        |    | (Host/Slug Routing)    |    | (WidgetPage)     |  |
-|  +-----------+-----------+    +-----------+------------+    +--------+---------+  |
-+--------------|----------------------------|--------------------------|------------+
-               | Real-time WebSocket / HTTP | Reactive Subscriptions   | Web API / WS
-               v                            v                          v
-+-----------------------------------------------------------------------------------+
-|                                Convex BaaS Tier                                   |
-|                                                                                   |
-|  +------------------+  +-------------------+  +--------------------------------+  |
-|  | Reactive Queries |  | Server Mutations  |  | Serverless Actions             |  |
-|  | & Indexes        |  | & Business Logic  |  | (OpenAI, Stripe, Resend, Webh) |  |
-|  +------------------+  +-------------------+  +--------------------------------+  |
-|                                                                                   |
-|  +-----------------------------------------------------------------------------+  |
-|  | HTTP Router (convex/http.ts & convex/httpApi.ts)                            |  |
-|  | - /ticket-api/tickets (REST API)     - /email/inbound (Inbound Mail)        |  |
-|  | - /stripe/webhook (Stripe Events)   - /api/auth/* (Convex Auth)             |  |
-|  +-----------------------------------------------------------------------------+  |
-|                                                                                   |
-|  +-----------------------------------------------------------------------------+  |
-|  | Convex Database & Vector Search Index (1536d OpenAI text-embedding-3-small)    |  |
-|  +-----------------------------------------------------------------------------+  |
-+-----------------------------------------------------------------------------------+
-```
+For component interaction details, see [Component Breakdown](#component-breakdown). For end-to-end processing steps, see [Data Flow](#data-flow).
 
 ---
 
-## 2. Component breakdown
+## Component Breakdown
 
-The codebase is organized into serverless backend modules (`convex/`) and React components (`src/`).
+### Database Schema (`convex/schema.ts`)
+- **Purpose**: Defines database tables, field validators, and indexes using Convex's strict schema system.
+- **Internal Mechanics**: Houses 25 relational tables including `tenants`, `tenantMembers`, `tickets`, `ticketMessages`, `chatConversations`, `chatMessages`, `kbArticles`, `workflows`, `auditLog`, and `webhookDeliveries`.
+- **Connections**: Serves as the single source of truth for all backend queries, mutations, and actions. Vector index `by_embedding` on `kbArticles` enables AI similarity search.
 
-### 2.1 Backend Modules (`convex/`)
+### AI Engine (`convex/ai.ts`)
+- **Purpose**: Provides AI vector embedding, knowledge retrieval, RAG chat deflection, and agent Copilot drafting.
+- **Internal Mechanics**: Communicates with OpenAI REST API via `convex/lib/openai.ts`. Embeds articles using `text-embedding-3-small` (1536 dimensions) and generates completions using `gpt-4o-mini`.
+- **Connections**: Consumed by `chat.ts` for automated visitor deflection and by `src/components/CopilotBox.tsx` in the agent interface. See [`copilot`](#convexaits-copilot) for implementation details.
 
-* **`schema.ts`**: Defines 25 database tables with Convex validators and indexes, covering `tenants`, `tenantMembers`, `agents`, `tickets`, `ticketMessages`, `chatConversations`, `chatMessages`, `kbCategories`, `kbArticles` (with vector index `by_embedding`), `gdprRequests`, `auditLog`, `integrationSettings`, `routingRules`, `pricingExperiments`, `experimentAssignments`, `ticketFeedback`, `webhookDeliveries`, `teamInvites`, `savedReplies`, `customerProfiles`, `timeEntries`, `followUps`, `businessHours`, `soloSettings`, `rateLimits`, `attachments`, `presence`, `workflows`, and `campaigns`.
-* **`ai.ts`**: Implements AI features using OpenAI. Handles document embedding (`embedArticle`), vector + keyword retrieval (`retrieveCards`), chatbot deflection (`deflectChat`, `deflectVisitor`), and AI copilot actions (`copilot` for reply drafting, thread summarization, and similar ticket lookup).
-* **`tickets.ts`**: Manages the ticket lifecycle: creation, paginated listing, full-text search, status updates, agent assignment, CSAT feedback, refund audit logging, and deletion.
-* **`chat.ts`**: Handles live chat conversations, message history, agent assignments, internal notes (`auditLog`), bot replies, and escalation to formal tickets with link sharing (`encodeChatShare`).
-* **`knowledge.ts` & `public.ts`**: Manage knowledge base articles and categories for agent management and public client consumption (`helpCenter`, `searchArticlesPublic`, `article` view tracking, `voteArticle`, `submitTicket`, and status checking `lookupTicket`).
-* **`billing.ts` & `lib/stripeCatalog.ts` & `lib/stripePlans.ts`**: Integrate Stripe billing. Supports Stripe Checkout, Billing Portal redirection, plan switching with prorated updates across Starter ($29/mo), Growth ($99/mo), and Enterprise ($299/mo) tiers, and webhook reconciliation (`applyPaidPlan`, `applySubscriptionUpdated`, `applySubscriptionCanceled`).
-* **`integrations.ts`**: Handles API key generation/rotation (hashed with SHA-256), webhook secret management, custom domain configuration, widget customization settings, and rule setup.
-* **`workflows.ts` & `lib/workflows.ts`**: Provides macro workflow execution triggered on `ticket_created` or `status_changed`. Applies actions including agent assignment, priority updates, tag additions, and status changes.
-* **`gdpr.ts`**: Compliance engine enabling GDPR data erasure. Cascades deletion across tickets, messages, feedback, chats, and customer profiles, accompanied by audit logging.
-* **`solopreneur.ts`**: Provides single-operator functionality ("Solo Mode"), business hours enforcement, auto-responders, time tracking (`timeEntries`), canned replies (`savedReplies`), customer profiles (`customerProfiles`), and follow-up reminders (`followUps`).
-* **`webhooks.ts`**: Async webhook delivery pipeline using Convex scheduled actions. Signs outgoing payloads with HMAC-SHA256 signatures, logs delivery attempts in `webhookDeliveries`, and retries with backoff.
-* **`http.ts` & `httpApi.ts`**: Convex HTTP Router hosting REST endpoints for external ticket API (`/ticket-api/tickets`), inbound email intake (`/email/inbound`), and Stripe webhooks (`/stripe/webhook`).
-* **`inbound.ts`**: Parses inbound email payloads into tickets, matches destination inbound email addresses to tenant integrations, and enforces email deduplication via `inboundMessageId`.
-* **`presence.ts`**: Real-time agent collision detection. Receives agent heartbeats and typing state updates to warn agents when another member is viewing or replying to the same ticket or chat.
+### Ticketing Core (`convex/tickets.ts`)
+- **Purpose**: Handles ticket lifecycle management including creation, pagination, full-text search, assignment, status transition, and CSAT logging.
+- **Internal Mechanics**: Executes mutations that enforce SLA target deadlines and log state changes to `auditLog`.
+- **Connections**: Triggered by web forms, inbound email, REST API, or live chat escalation via [`insertTicketHelper`](#convexlibinsertticketts-inserttickethelper).
 
-### 2.2 Frontend Architecture (`src/`)
+### Live Chat System (`convex/chat.ts`)
+- **Purpose**: Manages real-time visitor-to-agent chat conversations, internal agent notes, and ticket escalation.
+- **Internal Mechanics**: Maintains `chatConversations` and `chatMessages`. Generates visitor auth tokens and encodes shareable ticket links (`encodeChatShare`).
+- **Connections**: Links directly to [`convex/ai.ts`](#ai-engine-convexaits) for automated bot replies and [`convex/tickets.ts`](#ticketing-core-convexticketsts) when escalating a chat.
 
-* **`App.tsx` & `pageRoutes.ts`**: Core router and layout controller. Inspects `window.location.hostname` to host custom subdomains/domains for Help Centers or render the internal Admin Console layout (`ConsoleLayout` and `AppShell`).
-* **`useAuth.tsx`**: React context wrapping `@convex-dev/auth`. Manages user authentication state, active session, workspace tenant switching, and role permission evaluation (`hasPermission`, `canManageBilling`, `canManageTeam`).
-* **`AppShell.tsx`**: Primary navigation shell featuring tenant workspace switcher, navigation links, overdue follow-up badges, search bar, and admin mode toggle.
-* **Pages (`src/pages/`)**:
-  * `DashboardPage.tsx`: Executive dashboard displaying CSAT metrics, volume stats, SLA compliance, recent audit logs, and quick actions.
-  * `TicketsPage.tsx`: Support console with ticket list filters, message timeline, customer 360 profile sidebar, AI Copilot drawer, macro apply, saved reply inserter, and time tracking.
-  * `ChatPage.tsx`: Real-time live chat interface with agent queue, chat-to-ticket escalation modal, internal notes tab, and typing status indicators.
-  * `KnowledgePage.tsx`: KB editor with markdown writing, category management, and vector embedding status.
-  * `IntegrationsPage.tsx` & `IntegrationPage.tsx` & `OnboardingPage.tsx`: API key generation, webhook setup, widget customization preview, and channel configuration.
-  * `BillingPage.tsx`: Subscription management page showing current plan, MAU usage counters, upgrade buttons, Stripe checkout/portal triggers, and Stripe invoice history.
-  * `HelpCenterPage.tsx`: Public help center home, article viewer, contact form, and custom branding renderer.
-  * `TicketStatusPage.tsx`: Customer-facing ticket portal allowing end-users to check status, view replies, submit follow-up messages, and submit CSAT scores without logging in.
-  * `WidgetPage.tsx`: Standalone embeddable live chat widget page intended for `<iframe>` embedding or popup display.
-  * `SoloSettingsPage.tsx`, `TeamPage.tsx`, `RoutingRulesPage.tsx`, `SavedRepliesPage.tsx`, `GdprPage.tsx`, `TenantsPage.tsx`: Administrative settings pages.
+### Knowledge Base & Public Portal (`convex/knowledge.ts` & `convex/public.ts`)
+- **Purpose**: Enables knowledge article creation, category structuring, vector indexing, public search, and article helpfulness voting.
+- **Internal Mechanics**: Admin mutations update markdown content and trigger background embedding generation. Public queries expose published articles without requiring agent authentication.
+- **Connections**: Interacts with [`convex/ai.ts`](#ai-engine-convexaits) for vector retrieval and [`src/pages/HelpCenterPage.tsx`](#frontend-spa-src) for public display.
 
----
+### Billing & Stripe (`convex/billing.ts` & `convex/lib/stripeCatalog.ts`)
+- **Purpose**: Controls tier subscription management (Starter $29/mo, Growth $99/mo, Enterprise $299/mo), Stripe Checkout, and Billing Portal redirects.
+- **Internal Mechanics**: Converts incoming Stripe webhook events (`checkout.session.completed`, `customer.subscription.updated`) into tenant tier updates.
+- **Connections**: Enforces feature gates and active user limits across tenant settings. See [`applyPaidPlan`](#convexbillingts-applypaidplan).
 
-## 3. Data flow
+### Workflows & Routing (`convex/workflows.ts` & `convex/lib/workflows.ts`)
+- **Purpose**: Executes automated rules and macros triggered by ticket creation or status updates.
+- **Internal Mechanics**: Evaluates step sequences (assign agent, set priority, set status, add tags) sequentially against ticket attributes.
+- **Connections**: Invoked by ticket creation pipelines. See [`applyWorkflows`](#convexlibworkflowsts-applyworkflows).
 
-### 3.1 Inbound Ticket Creation & Routing Flow
+### Solopreneur Tools (`convex/solopreneur.ts`)
+- **Purpose**: Provides single-operator features including business hour SLA logic, auto-responders, time entry logs, canned replies, and follow-up reminders.
+- **Internal Mechanics**: Computes business-hour windows and tracks billable agent minutes.
+- **Connections**: Connected to [`convex/lib/businessSla.ts`](#convexlibbusinessslats-calculatesladeadline) for deadline calculations.
 
-```
-[Customer Request] ---> (Help Center Form / Inbound Email / REST API / Live Chat Escalation)
-                             |
-                             v
-               [Convex Mutation / HTTP Action]
-                             |
-   +-------------------------+-------------------------+
-   | Insert Ticket into 'tickets' Table                |
-   | (Assign Source, Priority, Initial Message, Tags) |
-   +-------------------------+-------------------------+
-                             |
-                             v
-            [Evaluate Workflows & Routing Rules]
-            (convex/lib/workflows.ts & routing.ts)
-                             |
-       +---------------------+---------------------+
-       |                                           |
-       v                                           v
-[Match Condition: Keyword/Category]     [Match Action: Assign Agent /]
-[Apply Tags & SLA Deadline]              [Set Priority / Set Status  ]
-       |                                           |
-       +---------------------+---------------------+
-                             |
-                             v
-               [Notify & Trigger Side Effects]
-       +---------------------+---------------------+
-       |                                           |
-       v                                           v
-[Queue Async Webhook Delivery]            [Send Confirmation Email]
-(convex/webhooks.ts -> HMAC Payload)      (convex/email.ts -> Resend API)
-       |                                           |
-       v                                           v
-[External Customer Webhook Endpoint]      [Customer Email Inbox]
-```
+### Integrations & HTTP Router (`convex/integrations.ts`, `convex/http.ts`, `convex/httpApi.ts`)
+- **Purpose**: Manages API key hashing (SHA-256), outbound webhook subscriptions, and public HTTP endpoints.
+- **Internal Mechanics**: Hosts REST endpoints for `/ticket-api/tickets`, inbound email processing `/email/inbound`, Stripe webhooks `/stripe/webhook`, and Meta messaging webhooks (`/whatsapp/webhook`, `/instagram/webhook`).
+- **Connections**: Dispatches outbound events to [`convex/webhooks.ts`](#convexwebhooksts-deliverwebhook).
 
-### 3.2 AI RAG Knowledge Retrieval & Chat Deflection Flow
+### Presence & Collision (`convex/presence.ts`)
+- **Purpose**: Provides real-time collision detection to prevent agents from overwriting each other's work.
+- **Internal Mechanics**: Receives periodic agent heartbeats and typing state updates over WebSocket subscriptions.
+- **Connections**: Surfaces viewing and typing status banners in [`src/pages/TicketsPage.tsx`](#frontend-spa-src) and [`src/pages/ChatPage.tsx`](#frontend-spa-src).
 
-```
-[User Message in Chat Widget]
-             |
-             v
-[Convex Action: ai:deflectChat / ai:deflectVisitor]
-             |
-             v
-[Compute 1536d Vector Embedding via OpenAI text-embedding-3-small]
-             |
-             +---> (If OpenAI Key Available) ---> [Vector Search in 'kbArticles.by_embedding' (score >= 0.28)]
-             |
-             +---> (If Vector Fails / No Key) --> [Full-Text Search in 'kbArticles.searchText']
-             |
-             v
-[Retrieved Top KB Article Excerpts]
-             |
-             v
-[LLM Completion: OpenAI gpt-4o-mini with Strict Grounding Prompt]
-             |
-             +---> (If Answer Found) ------> [Format Answer with Citing Link Cards (encodeChatShare)]
-             |
-             +---> (If Insufficient Docs) -> [Output Fallback: "An agent will follow up shortly."]
-             |
-             v
-[Insert Bot Message into 'chatMessages' Table] ---> (Pushed Real-Time to Client Widget via WS)
-```
+### GDPR & Compliance (`convex/gdpr.ts`)
+- **Purpose**: Executes data erasure requests in compliance with GDPR privacy requirements.
+- **Internal Mechanics**: Cascades deletion across tickets, messages, chat histories, feedback logs, and customer profiles, appending a entry to `auditLog`.
+- **Connections**: Invoked from `src/pages/GdprPage.tsx`.
+
+### Frontend SPA (`src/`)
+- **Purpose**: Renders the agent console, customer status portals, and embeddable live chat widget.
+- **Internal Mechanics**: Built with React 18 and `react-router-dom`. Uses `useAuth.tsx` to handle session tokens and tenant switcher state.
+- **Connections**: Establishes continuous WebSocket streams with Convex backend endpoints.
 
 ---
 
-## 4. Dependencies
+## Data Flow
 
-### 4.1 Production Core Dependencies
+### Flow 1: Inbound Ticket Creation & Automated Routing
+1. **Input**: A customer submits a query via web form, inbound email, REST API (`POST /ticket-api/tickets`), or chat escalation.
+2. **Processing**:
+   1. The request enters `convex/lib/insertTicket.ts`.
+   2. The helper validates input schema, checks tenant rate limits, and inserts a row into `tickets`.
+   3. `calculateSlaDeadline` calculates the target SLA deadline based on tenant business hours.
+   4. `applyWorkflows` evaluates active workflow triggers (`ticket_created`) and updates priority, agent assignment, or tags.
+3. **Output**: The ticket is persisted in `tickets`. Convex reactive queries automatically push the new ticket to active agent browser sessions via WebSockets.
 
-| Dependency | Version | Role & Function in Codebase |
-| :--- | :--- | :--- |
-| `react` / `react-dom` | `^18.3.1` | UI rendering engine for the React single-page application. |
-| `react-router-dom` | `^7.18.2` | Client-side routing, URL param extraction, and domain/host route matching. |
-| `convex` | `^1.44.0` | Backend-as-a-Service providing real-time reactive database, WebSocket subscriptions, serverless actions, vector search, and HTTP router. |
-| `@convex-dev/auth` | `^0.0.95` | Authentication layer supporting email/password and token-based sessions integrated with Convex tables. |
-| `@auth/core` | `^0.41.1` | Underlying OAuth/Auth standard library used by `@convex-dev/auth`. |
-| `lucide-react` | `^0.446.0` | Icon set for dashboard, navigation, and state indicators. |
-| `@sentry/react` | `^10.70.0` | Production error monitoring initialized in `src/main.tsx`. |
-| `recharts` | `^3.10.1` | Analytics charting library for rendering line/bar charts on `ReportsPage.tsx` and `DashboardPage.tsx`. |
+### Flow 2: Live Chat Message & AI Vector Deflection
+1. **Input**: A visitor sends a message through the live chat widget.
+2. **Processing**:
+   1. Message is inserted into `chatMessages`.
+   2. `convex/ai.ts` converts the text into a 1536-dimensional embedding via OpenAI `text-embedding-3-small`.
+   3. Convex vector search queries `kbArticles` index `by_embedding` for matches with relevance score $\ge 0.28$.
+   4. If matches are found, `gpt-4o-mini` formats a grounded response containing article links (`encodeChatShare`).
+   5. If matches are below threshold, a fallback message is returned indicating agent follow-up.
+3. **Output**: Bot reply is inserted into `chatMessages` and rendered instantly in the visitor's widget interface.
 
-### 4.2 External Services & Cloud APIs
+### Flow 3: External Webhook Delivery
+1. **Input**: A ticket event occurs (e.g., status changed or message added).
+2. **Processing**:
+   1. The mutation schedules a background execution of `deliverWebhook` in `convex/webhooks.ts`.
+   2. Payload is serialized and signed with an HMAC-SHA256 signature using the tenant's webhook secret.
+   3. An HTTP POST request is sent to the target URL.
+3. **Output**: Delivery status and HTTP response codes are logged in `webhookDeliveries`. On failure, retries are scheduled with exponential backoff.
 
-| Service | Protocol / Integration File | Operational Purpose |
-| :--- | :--- | :--- |
-| **OpenAI API** | HTTP REST (`convex/lib/openai.ts`) | Generates vector embeddings (`text-embedding-3-small`) and LLM text completions (`gpt-4o-mini`) for RAG deflection and Copilot drafting. |
-| **Stripe API** | HTTP REST & Webhooks (`convex/billing.ts`, `convex/lib/stripeCatalog.ts`) | Handles subscription lifecycle, checkout sessions, billing portal sessions, price proration, and invoice syncing. |
-| **Resend API** | HTTP REST (`convex/email.ts`) | Transactional email delivery service for ticket notifications, replies, and CSAT invites. |
-| **Sentry** | Browser SDK (`src/main.tsx`) | Front-end crash reporting and error capture. |
-
----
-
-## 5. Key functions/classes
-
-### 5.1 `convex/ai.ts` — `copilot` (Serverless Action)
-
-The core AI engine powering support agent workflow acceleration.
-
-```typescript
-export const copilot = action({
-  args: {
-    tenantId: v.id("tenants"),
-    mode: v.union(v.literal("draft"), v.literal("summarize"), v.literal("similar")),
-    ticketId: v.optional(v.id("tickets")),
-    conversationId: v.optional(v.id("chatConversations")),
-  },
-  handler: async (ctx, args) => {
-    // 1. Fetch transcript context & perform search for similar tickets
-    const data = await ctx.runQuery(internal.ai.ticketCopilotContext, { tenantId: args.tenantId, ticketId: args.ticketId, conversationId: args.conversationId });
-    if (args.mode === "similar") return { text: data.similar.length ? "Related tickets from search." : "No similar tickets.", similar: data.similar };
-    if (!hasOpenAiKey()) return { text: fallback, similar: data.similar };
-
-    // 2. Fetch grounded Knowledge Base context if drafting
-    let kbContext = "";
-    if (args.mode === "draft") {
-      const cards = await retrieveCards(ctx, args.tenantId, data.subject + " " + data.transcript);
-      if (cards.length > 0) kbContext = "\n\nRelevant KB Articles:\n" + cards.map(c => `[${c.title}]: ${c.excerpt}`).join("\n");
-    }
-
-    // 3. Prompt OpenAI gpt-4o-mini
-    const prompt = args.mode === "summarize"
-      ? "Summarize this support thread in 4 bullets: customer ask, what was tried, current status, suggested next step."
-      : "Draft a concise, professional agent reply. Use provided KB Articles to ground answer. Do not invent policy.";
-    const text = await chatComplete(prompt, `Subject: ${data.subject}\n\n${data.transcript}${kbContext}`);
-    return { text: text ?? "Could not generate suggestion.", similar: data.similar };
-  }
-});
-```
-
-### 5.2 `convex/lib/businessSla.ts` — `calculateSlaDeadline`
-
-Enforces business SLA deadlines by counting working minutes within configured working hours and timezones while skipping non-working days.
-
-```typescript
-export function calculateSlaDeadline(
-  createdAtMs: number,
-  priority: 'low' | 'medium' | 'high' | 'urgent',
-  hoursList: Array<{ dayOfWeek: number; isWorkingDay: boolean; openTime: string; closeTime: string; timezone: string }>
-): number {
-  const targetMinutes = SLA_TARGET_MINUTES[priority]; // urgent=120m, high=240m, medium=480m, low=1440m
-  let remainingMinutes = targetMinutes;
-  let currentMs = createdAtMs;
-
-  while (remainingMinutes > 0) {
-    const dayOfWeek = getDayOfWeekInTimezone(currentMs, tz);
-    const dayConfig = hoursList.find(h => h.dayOfWeek === dayOfWeek);
-    if (!dayConfig || !dayConfig.isWorkingDay) {
-      currentMs = jumpToNextDayStart(currentMs, tz);
-      continue;
-    }
-    const { openMs, closeMs } = getDayWindowMs(currentMs, dayConfig, tz);
-    if (currentMs < openMs) currentMs = openMs;
-    if (currentMs >= closeMs) { currentMs = jumpToNextDayStart(currentMs, tz); continue; }
-
-    const availableMinutes = (closeMs - currentMs) / 60000;
-    if (remainingMinutes <= availableMinutes) {
-      return currentMs + remainingMinutes * 60000;
-    } else {
-      remainingMinutes -= availableMinutes;
-      currentMs = jumpToNextDayStart(currentMs, tz);
-    }
-  }
-  return currentMs;
-}
-```
-
-### 5.3 `convex/lib/workflows.ts` — `applyWorkflows`
-
-Executes multi-step automated actions when triggered by ticket lifecycle events.
-
-```typescript
-export async function applyWorkflows(
-  ctx: MutationCtx,
-  tenantId: Id<"tenants">,
-  ticketId: Id<"tickets">,
-  trigger: "ticket_created" | "status_changed"
-): Promise<void> {
-  const workflows = await ctx.db.query("workflows")
-    .withIndex("by_tenant", q => q.eq("tenantId", tenantId))
-    .take(50);
-  const active = workflows.filter(w => w.enabled && w.trigger === trigger);
-
-  for (const w of active) {
-    for (const step of w.steps) {
-      if (step.type === "assign_agent") {
-        const agent = await ctx.db.get(step.value as Id<"agents">);
-        if (agent) await ctx.db.patch(ticketId, { assignedAgentId: agent._id });
-      } else if (step.type === "set_priority") {
-        await ctx.db.patch(ticketId, { priority: step.value as any });
-      } else if (step.type === "add_tag") {
-        const t = await ctx.db.get(ticketId);
-        if (t && !t.tags.includes(step.value)) await ctx.db.patch(ticketId, { tags: [...t.tags, step.value] });
-      } else if (step.type === "set_status") {
-        await ctx.db.patch(ticketId, { status: step.value as any });
-      }
-    }
-  }
-}
-```
+### Flow 4: Stripe Webhook Billing Reconciliation
+1. **Input**: Stripe issues an asynchronous HTTP webhook event to `/stripe/webhook`.
+2. **Processing**:
+   1. `convex/http.ts` verifies the signature using `STRIPE_WEBHOOK_SECRET`.
+   2. Event payload is passed to `convex/billing.ts`.
+   3. `applyPaidPlan`, `applySubscriptionUpdated`, or `applySubscriptionCanceled` updates the tenant's plan tier and subscription status.
+3. **Output**: Tenant plan features and seat caps are updated in `tenants`.
 
 ---
 
-## 6. Intended app purpose
+## Dependencies
 
-Webwi is an **all-in-one AI-native customer support platform** built to replace legacy help desks (such as Zendesk or Freshdesk) for SMBs, solopreneurs, and growing SaaS startups.
+### Runtime Dependencies
+- **`react` / `react-dom` (`^18.3.1`)**: Component-driven UI rendering engine.
+- **`react-router-dom` (`^7.18.2`)**: Client-side router handling domain routing and URL parameters.
+- **`convex` (`^1.44.0`)**: Real-time database, reactive subscription engine, serverless mutations, actions, and HTTP router.
+- **`@convex-dev/auth` (`^0.0.95`) & `@auth/core` (`^0.41.1`)**: Session management, authentication state, and token validation.
+- **`lucide-react` (`^0.446.0`)**: UI icon collection for status badges and navigation menus.
+- **`recharts` (`^3.10.1`)**: Data visualization library for dashboard and reporting metrics.
+- **`@sentry/react` (`^10.70.0`)**: Real-time front-end application error tracking.
 
-### Core Value Proposition
-
-1. **Inquiry Deflection**: Deflects incoming live chat inquiries using RAG vector search across published knowledge base articles.
-2. **AI Copilot Productivity**: Accelerates agent response times by auto-generating ticket reply drafts grounded in KB articles and providing 4-bullet thread summaries.
-3. **Flexible Solo & Team Scaling**: Scales from a single solopreneur operating with automated auto-responders to multi-tier support teams operating under RBAC.
-4. **Real-Time Responsiveness**: Powered by Convex WebSockets, eliminating manual page refreshes for incoming chat messages and agent collision warnings.
-
----
-
-## 7. Personas & target audience
-
-### Primary Users
-
-1. **Founders & Solopreneurs**: Operators who need an automated support solution that responds when offline, enforces business hours, and requires minimal triage.
-2. **Support Agents**: Team members who manage queues, reply using canned templates (`savedReplies`), escalate complex issues, track time, and rely on AI Copilot for drafting.
-3. **Support Managers & Admins**: Team leaders setting up routing rules, macro workflows, business hours, CSAT ratings, and team roles.
-
-### Secondary Users & End Consumers
-
-1. **End Customers**: Clients seeking help via live chat, searching KB articles, or checking ticket progress via the public Portal (`/ticket/:ticketId`).
-2. **System Integrators**: Developers consuming the REST API (`/ticket-api/tickets`) or listening to signed webhook events.
+### External Cloud Services
+- **OpenAI API**: Generates embeddings (`text-embedding-3-small`) and completion drafts (`gpt-4o-mini`) for knowledge deflection and copilot features.
+- **Stripe API**: Processes customer subscriptions, checkout sessions, and billing portal access.
+- **Resend API**: Transactional email delivery service for ticket notifications and replies.
+- **Meta Graph API**: Webhook receiver for WhatsApp and Instagram direct messages `<unclear — needs input: full OAuth token refresh flow details not provided>`.
 
 ---
 
-## 8. Feature inventory
+## Key Functions/Classes
 
-### Fully Implemented
+### `convex/ai.ts`: `copilot`
+- **Purpose**: Generates AI assistance for agents handling support requests.
+- **Arguments**: `tenantId`, `mode` (`"draft"` | `"summarize"` | `"similar"`), `ticketId?`, `conversationId?`.
+- **Execution Trigger**: Invoked when an agent clicks Copilot actions ("Draft Reply", "Summarize Thread", "Find Similar") in `CopilotBox.tsx`.
+- **Behavior**: Retrieves discussion transcripts, queries relevant knowledge base articles, and prompts OpenAI `gpt-4o-mini` to construct grounded response drafts or bulleted summaries.
 
-* **Multi-Tenant Architecture**: Complete isolation across `tenants`, workspace switcher, custom slug/host resolution, and tenant-scoped database queries.
-* **Role-Based Access Control (RBAC)**: 5 distinct role tiers (`admin`, `manager`, `senior_agent`, `junior_agent`, `read_only`) enforced on client and server.
-* **Omnichannel Ticket Management**: Ticket creation via web forms, REST API, inbound email parsing, and live chat escalation. Full history and agent assignment.
-* **Real-Time Live Chat & Embeddable Widget**: Real-time WebSocket chat, visitor token validation, custom widget branding, and internal notes.
-* **AI Vector Search & RAG Deflection**: OpenAI vector search (1536d `text-embedding-3-small`) and keyword fallback for chat deflection and article link citation (`encodeChatShare`).
-* **AI Agent Copilot**: Thread summarization, grounded response drafting, and full-text search for similar historical tickets.
-* **Self-Service Knowledge Base & Help Center**: Article publishing, markdown editing, category grouping, helpful/unhelpful voting, public help center, and custom domain routing.
-* **Automated Routing & Macro Workflows**: Rules engine for category/priority/keyword routing, alongside multi-step workflows for status, assignment, and tagging changes.
-* **Stripe Subscription & Billing Management**: Stripe Checkout and Billing Portal integration, supporting Starter/Growth/Enterprise tier proration, MAU limits, and webhooks.
-* **GDPR Compliance & Erasure Engine**: Automated deletion of personal data across tickets, chats, and profiles with audit logging.
-* **Solopreneur & Productivity Tools**: Solo Mode auto-responder, time tracking with billable flags, canned replies, customer 360 profiles, and follow-up reminders.
-* **Agent Presence & Collision Warning**: Real-time heartbeat tracking that warns agents when another team member is viewing or typing.
-* **Inbound & Outbound Webhooks**: Rate-limited REST API for external ticket management and outgoing signed HMAC-SHA256 webhooks with retry logic.
-* **Pricing A/B Experimentation Engine**: Split-testing infrastructure for pricing experiments with session assignment persistence.
-* **WhatsApp & Instagram Social Messaging**: Inbound HTTP webhook routes (`/whatsapp/webhook`, `/instagram/webhook`) for Meta Graph API verification, event ingestion, and automatic ticket creation.
-* **Shopify Store Live Order Lookup**: Serverless action `fetchShopifyOrders` querying Shopify Admin REST/GraphQL API and rendering live customer orders, totals, and fulfillment status in Customer 360 view.
-* **SSO / SAML OIDC Authentication**: OIDC identity provider authentication flow integrated with Convex Auth and "Sign in with SSO" interface.
-* **Customizable Email Templates & Wrappers**: Integration settings schema and notification wrapper supporting custom HTML headers and footers for transactional emails.
-* **Autonomous AI Resolution Agent**: `autoResolveTicket` action for automatically answering queries and setting ticket status to resolved based on high-confidence RAG article matching.
-* **Enhanced Agent UX**: Keyboard shortcuts (`Cmd+Enter` to send, `Cmd+Shift+R` for templates) and rich-text Markdown reply formatting toolbar.
+### `convex/lib/businessSla.ts`: `calculateSlaDeadline`
+- **Purpose**: Calculates SLA target resolution timestamps while respecting active working hours and non-working days.
+- **Arguments**: `createdAtMs` (number), `priority` (`"low"` | `"medium"` | `"high"` | `"urgent"`), `hoursList` (array of working hour definitions).
+- **Execution Trigger**: Called inside [`insertTicketHelper`](#convexlibinsertticketts-inserttickethelper) during ticket creation.
+- **Behavior**: Traverses calendar time, advancing remaining target minutes only during configured working windows until target resolution time is calculated.
 
-### Partially Implemented
+### `convex/lib/workflows.ts`: `applyWorkflows`
+- **Purpose**: Applies multi-step macro rules to tickets.
+- **Arguments**: `ctx` (MutationCtx), `tenantId`, `ticketId`, `trigger` (`"ticket_created"` | `"status_changed"`).
+- **Execution Trigger**: Called immediately after ticket creation or status modification.
+- **Behavior**: Queries `workflows` table for active rules matching the trigger and sequentially updates target ticket properties (assigned agent, priority, tags, status).
 
-* **Transactional Email Design Studio**: Outbound emails use Resend API with custom HTML header/footer wrappers, but a full WYSIWYG email drag-and-drop builder is not included.
+### `convex/lib/insertTicket.ts`: `insertTicketHelper`
+- **Purpose**: Standardized pipeline helper for ticket ingestion across all channels.
+- **Arguments**: `ctx` (MutationCtx), ticket payload data (subject, body, source, customer profile info).
+- **Execution Trigger**: Called by web form handlers, REST API endpoints, inbound email parsers, and chat escalation mutations.
+- **Behavior**: Creates customer profile records, inserts ticket record, computes SLA deadlines, applies workflow triggers, and records audit logs.
 
-### Not Implemented (Stubs / Shell Artifacts)
+### `convex/webhooks.ts`: `deliverWebhook`
+- **Purpose**: Sends signed HMAC payloads to external tenant endpoints.
+- **Arguments**: `tenantId`, `event` (string), `payload` (object).
+- **Execution Trigger**: Scheduled as a background action following system events.
+- **Behavior**: Serializes event payload, signs headers using HMAC-SHA256, issues HTTP POST, and logs output in `webhookDeliveries`.
 
-* **Native Mobile Applications**: No iOS or Android native application code exists in the repository.
-
----
-
-## 9. Improvement suggestions
-
-### UX Improvements
-
-1. **Rich Text Ticket Editor**: Replace the plain text `<textarea>` in ticket replies with a rich-text or markdown editor supporting inline image uploads.
-2. **Keyboard Shortcuts**: Implement hotkeys (e.g., `Cmd+Enter` to send, `e` to resolve, `r` for canned replies) to improve agent triage velocity.
-3. **Enhanced Customer 360 Sidebar**: Expand the customer sidebar to automatically surface historical CSAT scores, previous chat transcripts, and lifetime spend in a single view.
-
-### Performance Improvements
-
-1. **Virtualized Message Lists**: Implement message list virtualization (e.g., `react-window`) in chat and ticket pages to preserve smooth DOM rendering for long histories.
-2. **Optimistic UI Updates**: Apply optimistic updates on chat message sending and ticket status changes to make interface interactions feel instantaneous.
-
-### Missing Critical Features
-
-1. **Full WhatsApp & Social Channel Ingestion**: Complete the HTTP webhooks for Meta Graph API to allow agents to receive and reply to WhatsApp and Instagram direct messages directly inside the Inbox page.
-2. **Customizable Email Templates**: Provide an HTML email template editor in admin settings so tenants can customize branding for outbound notifications.
-
-### Value-Add Features
-
-1. **AI Sentiment Analysis**: Calculate customer sentiment (Frustrated, Neutral, Delighted) from incoming ticket text to prioritize urgent issues.
-2. **Shopify Order Context Card**: Fetch live order history and fulfillment status from Shopify's Admin API inside the Customer 360 drawer.
+### `convex/billing.ts`: `applyPaidPlan`
+- **Purpose**: Upgrades or syncs tenant subscription details following billing changes.
+- **Arguments**: `stripeCustomerId` (string), `stripeSubscriptionId` (string), `planTier` (`"starter"` | `"growth"` | `"enterprise"`).
+- **Execution Trigger**: Called by Stripe HTTP webhook handlers upon successful subscription purchase or renewal.
+- **Behavior**: Patches target tenant record with updated tier permissions, seat caps, and renewal dates.
 
 ---
 
-## 10. Competitive assessment
+## Cross-Links
+- Jump to [Architecture Overview](#overview) to review system structure.
+- Review [Component Breakdown](#component-breakdown) for module implementations.
+- Trace step sequences in [Data Flow](#data-flow).
+- Inspect external services in [Dependencies](#dependencies).
+- Examine implementation logic in [Key Functions/Classes](#key-functionsclasses).
 
-### Primary Competitors & Feature Overlap
+---
+---
 
-| Competitor | Overlapping Features | Webwi Differentiator / Advantage |
-| :--- | :--- | :--- |
-| **Zendesk / Freshdesk** | Omnichannel ticketing, KB articles, macro rules, SLA management, team roles. | **Simpler setup & lower cost**: Modern real-time UI without legacy complexity; integrated AI vector deflection out-of-the-box. |
-| **Intercom** | Live chat widget, proactive campaigns, bot deflection, customer inbox. | **Lower pricing & Solopreneur friendly**: Affordable flat-rate subscription tiers ($29–$299/mo) without per-seat or per-resolution cost spikes. |
-| **Crisp / Help Scout** | Shared inbox, help center, saved replies, solopreneur mode. | **Native Convex BaaS real-time stack**: Zero lag websocket updates, built-in vector search RAG, and native Stripe proration. |
+# External Documentation
 
-### Path to Market Competition
-
-To compete effectively against established support platforms, Webwi must focus on:
-
-1. **Completing Social Channel Integrations**: Finalize WhatsApp and Instagram integrations to serve e-commerce brands requiring unified social support.
-2. **Self-Serve App Store Plugins**: Publish official Shopify App Store and WordPress plugin packages to allow one-click installation of the Webwi chat widget and help center.
-3. **Competitive Market Positioning**: Position Webwi as the "AI-first, Developer-friendly Support Operating System" for indie SaaS founders and growing startups. `<uncertain>`
+## Table of Contents
+- [Getting Started](#getting-started)
+  - [What Webwi Is For](#what-webwi-is-for)
+  - [First 3 Steps for New Users](#first-3-steps-for-new-users)
+- [Task How-Tos](#task-how-tos)
+  - [1. Setting Up Your Support Workspace and Branding](#1-setting-up-your-support-workspace-and-branding)
+  - [2. Managing Support Tickets](#2-managing-support-tickets)
+  - [3. Using Live Chat and Escalating Chat to a Ticket](#3-using-live-chat-and-escalating-chat-to-a-ticket)
+  - [4. Creating and Publishing Knowledge Base Articles](#4-creating-and-publishing-knowledge-base-articles)
+  - [5. Setting Up Business Hours and Auto-Responders (Solo Mode)](#5-setting-up-business-hours-and-auto-responders-solo-mode)
+  - [6. Inviting Team Members and Assigning Roles](#6-inviting-team-members-and-assigning-roles)
+  - [7. Managing Subscriptions and Billing](#7-managing-subscriptions-and-billing)
+- [FAQ / Troubleshooting](#faq--troubleshooting)
+  - [Why is my live chat widget not appearing on my website?](#why-is-my-live-chat-widget-not-appearing-on-my-website)
+  - [Why are email notifications not being sent to customers?](#why-are-email-notifications-not-being-sent-to-customers)
+  - [Why is the AI Copilot not giving reply suggestions?](#why-is-the-ai-copilot-not-giving-reply-suggestions)
+  - [Why is my updated billing plan not showing in my account?](#why-is-my-updated-billing-plan-not-showing-in-my-account)
 
 ---
 
-## 11. Implementation & go-live plan
+## Getting Started
 
-### Phase 1: Infrastructure Hardening & Verification (Weeks 1–2)
+### What Webwi Is For
+Webwi is an all-in-one customer support tool. It helps business owners and support teams handle customer messages from email, website forms, and live chat in one single place. It also provides automatic AI answer suggestions, a public Help Center for self-service help, and automated rules to save time.
 
-* **Milestone 1.1**: Deploy Convex backend to production (`npx convex deploy`) and verify environment variables (`OPENAI_API_KEY`, `STRIPE_SECRET_KEY`, `AUTH_RESEND_KEY`, `SITE_URL`).
-* **Milestone 1.2**: Configure production Sentry error reporting and set up domain DNS records for custom domain hosting (`webwi.red` / custom client CNAMEs).
-* **Milestone 1.3**: Execute automated test suite (`npm test`) and frontend build verification (`npm run build`).
+### First 3 Steps for New Users
+To set up your account, complete these initial steps:
+1. **Set up your workspace**: Enter your business name, logo, and help desk web link under workspace settings.
+2. **Create your first Knowledge Base article**: Add answers to common questions so customers can help themselves.
+3. **Embed the chat widget or share your Help Center link**: Add the chat widget code to your website or share your Help Center link with customers.
 
-### Phase 2: Channel Expansion & Polish (Weeks 3–5)
-
-* **Milestone 2.1**: Implement Meta Graph API webhooks for WhatsApp Cloud API and Instagram DM ingestion in `convex/http.ts`.
-* **Milestone 2.2**: Integrate rich-text markdown editor into agent reply panel and complete Shopify Admin API context retrieval inside Customer 360 modal.
-* **Milestone 2.3**: Conduct end-to-end load testing on Convex WebSocket subscriptions under high chat concurrency.
-
-### Phase 3: Launch & Distribution (Weeks 6–8)
-
-* **Milestone 3.1**: Public launch on Product Hunt, Hacker News, and indie hacker communities with a free 14-day trial offer.
-* **Milestone 3.2**: Submit the Webwi embeddable chat widget to the Shopify App Store and WordPress Plugin Directory.
-* **Milestone 3.3**: Initiate developer documentation campaign showcasing REST API integration and custom webhook handling.
-
-### Resource Estimates
-
-* **Engineering**: 1 Full-Stack Tech Lead (Convex/React/TypeScript) + 1 Frontend UI/UX Engineer (400 total hours). `<uncertain>`
-* **Infrastructure Budget**: ~$150–$300/month initial burn (Convex Pro plan, OpenAI API usage, Stripe fees, Resend email tier). `<uncertain>`
+For detailed step-by-step guidance, see [Task How-Tos](#task-how-tos).
 
 ---
 
-## 12. Market fit analysis
+## Task How-Tos
 
-Webwi demonstrates strong Product-Market Fit (PMF) potential within the fast-growing segment of **AI-native customer service software**. Modern startups and solopreneurs actively seek alternatives to expensive legacy platforms like Zendesk or Intercom, which frequently charge prohibitive per-agent seat fees or per-resolution AI surcharges.
+### 1. Setting Up Your Support Workspace and Branding
+Customize how your customer support page and live chat widget look to match your brand.
+1. Log into your account and click **Settings** in the main navigation menu.
+2. Select **Integrations & Widget** from the settings options.
+3. Enter your business name, upload your brand logo, and choose your primary brand color.
+4. Copy the provided chat widget script code snippet.
+5. Paste the code snippet into your website's HTML before the closing `</body>` tag.
+6. Save your changes.
 
-### Target Segment Fit
+### 2. Managing Support Tickets
+View, organize, and reply to customer requests sent to your support team.
+1. Click **Tickets** in the main navigation bar to view your inbox.
+2. Select a ticket from the list to view the message history.
+3. Click inside the reply box at the bottom of the screen to write your message.
+4. (Optional) Click **AI Copilot Draft** to automatically generate a suggested response based on your Help Center articles.
+5. Click **Send Reply** to deliver the message to the customer.
+6. Update the ticket status dropdown (e.g., set to **Resolved** or **Closed**) when finished.
 
-```
-+-----------------------------------------------------------------------------------+
-|                           Market Segment Fit Matrix                               |
-+-----------------------------------+-----------------------------------------------+
-| Target Segment                    | Alignment with Webwi Capabilities              |
-+-----------------------------------+-----------------------------------------------+
-| Indie Hackers & Solopreneurs      | EXCELLENT: Solo Mode auto-responders, simple   |
-|                                   | $29/mo Starter tier, zero maintenance.        |
-+-----------------------------------+-----------------------------------------------+
-| B2B SaaS Startups (5-25 employees)| HIGH: RBAC role tiers, SLA enforcement, AI     |
-|                                   | Copilot drafting, team invites, REST API.     |
-+-----------------------------------+-----------------------------------------------+
-| E-Commerce Brands (Shopify)       | MODERATE: Requires completion of WhatsApp/    |
-|                                   | Instagram channels & Shopify order lookup.    |
-+-----------------------------------+-----------------------------------------------+
-```
+### 3. Using Live Chat and Escalating Chat to a Ticket
+Chat with website visitors in real time and convert complex chats into support tickets.
+1. Click **Live Chat** in the main navigation bar to see incoming visitor chats.
+2. Select an active conversation from the left sidebar to start chatting.
+3. Type your response in the message field and press **Enter** to reply.
+4. If a problem requires ongoing follow-up, click **Escalate to Ticket** at the top right of the chat panel.
+5. Confirm customer contact details and click **Create Ticket**. The conversation will convert into a formal support ticket with complete chat history saved.
 
----
+### 4. Creating and Publishing Knowledge Base Articles
+Publish help guides so customers can quickly find answers on their own.
+1. Click **Knowledge Base** in the main navigation bar.
+2. Click **New Article** in the top right corner.
+3. Enter an article title, select a category, and type your article content using standard text formatting.
+4. Toggle the status switch from **Draft** to **Published**.
+5. Click **Save Article**. Your guide will immediately appear on your public Help Center page.
 
-## 13. Valuation
+### 5. Setting Up Business Hours and Auto-Responders (Solo Mode)
+Set operating hours and automatic replies when you are away from your desk.
+1. Click **Settings** and select **Solo / Business Hours**.
+2. Turn on the **Solo Mode** switch.
+3. Select your local time zone and check the days of the week your business is open.
+4. Enter your daily start time and end time for working hours.
+5. Type an automated message in the **Offline Auto-Responder** text box (for example: *"Thanks for reaching out! We are currently offline and will reply during business hours."*).
+6. Click **Save Settings**.
 
-*Note: Financial figures, valuations, and revenue estimates in this section represent inferred market projections based on software industry benchmarks and must be treated as indicative estimates `<uncertain>`.*
+### 6. Inviting Team Members and Assigning Roles
+Add colleagues to your workspace and manage what permissions they have.
+1. Click **Settings** and select **Team Members**.
+2. Click **Invite Member**.
+3. Enter your team member's email address and select their permission role:
+   - **Admin**: Full access to all settings, team management, and billing.
+   - **Manager**: Can manage tickets, knowledge base articles, and workflows.
+   - **Senior Agent / Junior Agent**: Can view and reply to customer tickets and live chats.
+   - **Read Only**: Can view reports and ticket history without making changes.
+4. Click **Send Invitation**. An invitation link will be sent to their email.
 
-### Financial Valuation Framework
-
-Assuming a commercial rollout under existing subscription tiers ($29/mo Starter, $99/mo Growth, $299/mo Enterprise):
-
-| Metric / Scenario | Conservative (Year 1) | Target (Year 2) | Aggressive (Year 3) |
-| :--- | :--- | :--- | :--- |
-| **Active Paid Workspaces** | 150 tenants | 800 tenants | 2,500 tenants |
-| **Average Revenue Per User (ARPU)** | ~$65 / month | ~$85 / month | ~$110 / month |
-| **Annual Run Rate (ARR)** | ~$117,000 `<uncertain>` | ~$816,000 `<uncertain>` | ~$3,300,000 `<uncertain>` |
-| **SaaS Valuation Multiple** | 4x - 6x ARR | 6x - 8x ARR | 8x - 10x ARR |
-| **Estimated Enterprise Valuation** | **~$500K – $700K** `<uncertain>` | **~$4.8M – $6.5M** `<uncertain>` | **~$26M – $33M** `<uncertain>` |
-
----
-
-## 14. Likelihood that this will be a successful venture
-
-### Overall Success Assessment: **HIGH (78% Probability of Commercial Success)** `<uncertain>`
-
-### Key Strengths & Growth Catalysts
-
-1. **Solid Technical Architecture**: The combination of Convex real-time BaaS, React 18, and OpenAI vector embeddings delivers enterprise-grade responsiveness and AI capabilities with minimal operational overhead.
-2. **Complete Core Feature Set**: Webwi contains full Stripe billing proration, RBAC authorization, macro workflows, SLA business hour engines, and GDPR compliance.
-3. **Favorable Industry Tailwinds**: The rapid shift toward AI-assisted support workflows creates a strong market opening for nimble, AI-native platforms.
-
-### Key Risk Factors & Mitigations
-
-* **Risk 1: AI API Cost Overruns**: High vector search and completion usage could squeeze margins on lower subscription tiers.
-  * *Mitigation*: The codebase includes vector score thresholding (`_score >= 0.28`) and rate-limiting (`rateLimits` table) to prevent API abuse.
-* **Risk 2: Customer Acquisition Competition**: Competing against heavily funded incumbents requires focused niche positioning.
-  * *Mitigation*: Focus acquisition initially on indie developer communities, micro-SaaS founders, and Convex/React ecosystem adopters.
-
----
-
-## 15. Go / No Go / Pivot - whether to move forward with app as is, scrap the app, or pivot the app
-
-### Recommendation: **GO (Proceed to Commercial Launch)**
-
-The codebase is exceptionally well-architected, production-ready, and feature-complete across data persistence, real-time sync, AI assistance, security, and subscription billing.
-
-### Action Plan for Proceeding
-
-1. **Move Forward As-Is for Beta**: Launch the application immediately in closed beta for SaaS founders and solopreneurs utilizing the fully implemented web chat, ticket management, and AI Copilot features.
-2. **Execute Targeted Expansion**: Complete remaining social channel integrations (WhatsApp/Instagram) as a secondary product milestone based on initial customer feedback.
-3. **Do Not Scrap or Pivot**: The core value proposition as an AI-native omnichannel support platform is validated by implementation quality and market demand.
+### 7. Managing Subscriptions and Billing
+View your active subscription plan, download invoices, or change your billing tier.
+1. Click **Settings** and select **Billing & Subscription**.
+2. Review your current plan tier (**Starter**, **Growth**, or **Enterprise**) and monthly user account limits.
+3. Click **Upgrade Plan** or **Change Plan** to choose a different subscription tier.
+4. Click **Manage Billing in Stripe** to view invoice receipts, update credit card details, or cancel your subscription.
 
 ---
 
-I have 100% confidence in this code review and product assessment, based directly on exhaustive static analysis of the repository files and verifiable market benchmarks.
+## FAQ / Troubleshooting
+
+### Why is my live chat widget not appearing on my website?
+1. Check that the chat widget script is correctly placed in your website's HTML code before the `</body>` tag.
+2. Confirm that your domain is added under allowed domains in **Settings > Integrations**.
+3. Clear your web browser cache and refresh the page.
+
+### Why are email notifications not being sent to customers?
+1. Ensure your outbound email service credentials are configured in workspace settings.
+2. Verify that the customer's email address is correctly formatted in the ticket profile sidebar.
+3. Check if the customer's email provider marked the message as spam or junk. `<unclear — needs input: custom email server domain setup rules depend on external email host>`
+
+### Why is the AI Copilot not giving reply suggestions?
+1. Check that you have published at least one Knowledge Base article containing information relevant to the customer's question.
+2. Confirm that the AI Copilot feature is turned on in your workspace settings.
+3. If an OpenAI API key was entered manually, confirm the key is active and has available usage credits.
+
+### Why is my updated billing plan not showing in my account?
+1. Wait up to two minutes after completing checkout for payment confirmation to process.
+2. Refresh your web browser page to update your account status.
+3. If your account still shows the previous plan, check your payment email for a Stripe receipt to ensure payment was successful.
+
+For additional support instructions, return to [Getting Started](#getting-started) or review [Task How-Tos](#task-how-tos).
