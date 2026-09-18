@@ -1,12 +1,11 @@
 import { v } from "convex/values";
 import { action, internalAction, internalMutation, internalQuery, type ActionCtx } from "./_generated/server";
-import { internal } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import { requireMember } from "./lib/auth";
 import { articleSearchText } from "./lib/hosts";
 import { chatComplete, embedText, hasOpenAiKey } from "./lib/openai";
 import { encodeChatShare, excerptFrom } from "./lib/chatContent";
 import { keywordArticles } from "./lib/retrieve";
-import { shapeChatMessage } from "./lib/shape";
 import { chatMessageValidator } from "./lib/validators";
 import type { Id } from "./_generated/dataModel";
 
@@ -342,5 +341,41 @@ export const copilot = action({
     const text = await chatComplete(prompt, `Subject: ${data.subject}\n\n${data.transcript}${kbContext}`)
       ?? "Could not generate a suggestion right now.";
     return { text, similar: data.similar };
+  },
+});
+
+export const autoResolveTicket = action({
+  args: {
+    tenantId: v.id("tenants"),
+    ticketId: v.id("tickets"),
+  },
+  returns: v.object({ resolved: v.boolean(), reason: v.string() }),
+  handler: async (ctx, args) => {
+    const data = await ctx.runQuery(internal.ai.ticketCopilotContext, {
+      tenantId: args.tenantId,
+      ticketId: args.ticketId,
+    });
+    if (!data.subject) return { resolved: false, reason: "Ticket not found" };
+
+    const cards = await retrieveCards(ctx, args.tenantId, data.subject + " " + data.transcript);
+    if (cards.length === 0) {
+      return { resolved: false, reason: "No matching knowledge base article found for automatic resolution." };
+    }
+
+    const text = await generateDeflection(data.subject + " " + data.transcript, cards);
+    await ctx.runMutation(api.tickets.addMessage, {
+      tenantId: args.tenantId,
+      ticketId: args.ticketId,
+      content: `[AI Autonomous Agent]: ${text}`,
+      senderName: "Webwi AI Assistant",
+    });
+
+    await ctx.runMutation(api.tickets.updateStatus, {
+      tenantId: args.tenantId,
+      ticketId: args.ticketId,
+      status: "resolved",
+    });
+
+    return { resolved: true, reason: `Automatically resolved based on article '${cards[0]?.title}'` };
   },
 });

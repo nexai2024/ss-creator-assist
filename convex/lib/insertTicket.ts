@@ -5,7 +5,7 @@ import { applyWorkflows } from "./workflows";
 import { classifyTicket } from "./shape";
 import { slaDeadlineMs, type BusinessHourRow } from "./businessSla";
 
-export type TicketSource = "console" | "help_center" | "chat" | "email" | "api";
+export type TicketSource = "console" | "help_center" | "chat" | "email" | "api" | "whatsapp" | "instagram";
 
 async function loadHours(ctx: MutationCtx, tenantId: Id<"tenants">): Promise<BusinessHourRow[]> {
   const rows = await ctx.db.query("businessHours").withIndex("by_tenant", (q) => q.eq("tenantId", tenantId)).take(7);

@@ -258,4 +258,97 @@ http.route({ path: "/stripe/webhook", method: "POST", handler: stripeWebhook });
 http.route({ path: "/email/inbound", method: "POST", handler: emailInbound });
 http.route({ path: "/email/inbound", method: "OPTIONS", handler: emailInbound });
 
+const whatsappWebhook = httpAction(async (ctx, req) => {
+  const url = new URL(req.url);
+  if (req.method === "GET") {
+    const mode = url.searchParams.get("hub.mode");
+    const challenge = url.searchParams.get("hub.challenge");
+    if (mode === "subscribe" && challenge) {
+      return new Response(challenge, { status: 200 });
+    }
+    return new Response("Forbidden", { status: 403 });
+  }
+
+  if (req.method === "POST") {
+    try {
+      const payload = await req.json() as Record<string, unknown>;
+      const entries = Array.isArray(payload?.entry) ? payload.entry : [];
+      const entry = entries[0] as Record<string, unknown> | undefined;
+      const changes = Array.isArray(entry?.changes) ? entry.changes : [];
+      const change = changes[0] as Record<string, unknown> | undefined;
+      const value = change?.value as Record<string, unknown> | undefined;
+      const messages = Array.isArray(value?.messages) ? value.messages : [];
+      const message = messages[0] as Record<string, unknown> | undefined;
+      if (message) {
+        const senderId = String(message.from ?? "");
+        const textObj = message.text as Record<string, unknown> | undefined;
+        const text = String(textObj?.body ?? "(non-text message)");
+        const metadata = value?.metadata as Record<string, unknown> | undefined;
+        const phoneNumberId = metadata?.phone_number_id ? String(metadata.phone_number_id) : undefined;
+        const contacts = Array.isArray(value?.contacts) ? value.contacts : [];
+        const contact = contacts[0] as Record<string, unknown> | undefined;
+        const profile = contact?.profile as Record<string, unknown> | undefined;
+        const contactName = profile?.name ? String(profile.name) : undefined;
+        await ctx.runMutation(internal.inbound.createFromSocial, {
+          channel: "whatsapp",
+          senderId,
+          senderName: contactName,
+          text,
+          phoneNumberId,
+        });
+      }
+    } catch (err) {
+      console.error("WhatsApp webhook error", err);
+    }
+    return new Response(JSON.stringify({ status: "ok" }), { status: 200, headers: { "Content-Type": "application/json" } });
+  }
+
+  return new Response("Method not allowed", { status: 405 });
+});
+
+const instagramWebhook = httpAction(async (ctx, req) => {
+  const url = new URL(req.url);
+  if (req.method === "GET") {
+    const mode = url.searchParams.get("hub.mode");
+    const challenge = url.searchParams.get("hub.challenge");
+    if (mode === "subscribe" && challenge) {
+      return new Response(challenge, { status: 200 });
+    }
+    return new Response("Forbidden", { status: 403 });
+  }
+
+  if (req.method === "POST") {
+    try {
+      const payload = await req.json() as Record<string, unknown>;
+      const entries = Array.isArray(payload?.entry) ? payload.entry : [];
+      const entry = entries[0] as Record<string, unknown> | undefined;
+      const accountId = entry?.id ? String(entry.id) : undefined;
+      const messagings = Array.isArray(entry?.messaging) ? entry.messaging : [];
+      const messaging = messagings[0] as Record<string, unknown> | undefined;
+      if (messaging) {
+        const senderObj = messaging.sender as Record<string, unknown> | undefined;
+        const senderId = String(senderObj?.id ?? "");
+        const messageObj = messaging.message as Record<string, unknown> | undefined;
+        const text = String(messageObj?.text ?? "(non-text message)");
+        await ctx.runMutation(internal.inbound.createFromSocial, {
+          channel: "instagram",
+          senderId,
+          text,
+          accountId,
+        });
+      }
+    } catch (err) {
+      console.error("Instagram webhook error", err);
+    }
+    return new Response(JSON.stringify({ status: "ok" }), { status: 200, headers: { "Content-Type": "application/json" } });
+  }
+
+  return new Response("Method not allowed", { status: 405 });
+});
+
+http.route({ path: "/whatsapp/webhook", method: "GET", handler: whatsappWebhook });
+http.route({ path: "/whatsapp/webhook", method: "POST", handler: whatsappWebhook });
+http.route({ path: "/instagram/webhook", method: "GET", handler: instagramWebhook });
+http.route({ path: "/instagram/webhook", method: "POST", handler: instagramWebhook });
+
 export default http;

@@ -134,6 +134,13 @@ export type IntegrationSettings = {
   sso_provider: string | null;
   sso_metadata_url: string | null;
   inbound_email_address: string | null;
+  stripe_connected_account_id?: string | null;
+  shopify_store_domain?: string | null;
+  shopify_access_token?: string | null;
+  whatsapp_phone_number_id?: string | null;
+  whatsapp_access_token?: string | null;
+  instagram_account_id?: string | null;
+  instagram_access_token?: string | null;
   locale: string;
   onboarding_completed: boolean;
   onboarding_step: number;

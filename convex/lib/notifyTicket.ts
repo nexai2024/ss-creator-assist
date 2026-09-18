@@ -8,6 +8,13 @@ async function tenantName(ctx: MutationCtx, tenantId: Id<"tenants">): Promise<st
   return tenant?.name ?? "Support";
 }
 
+async function wrapEmailHtml(ctx: MutationCtx, tenantId: Id<"tenants">, html: string): Promise<string> {
+  const integration = await ctx.db.query("integrationSettings").withIndex("by_tenant", (q) => q.eq("tenantId", tenantId)).first();
+  const header = integration?.emailHeaderHtml ? `<div class="email-header">${integration.emailHeaderHtml}</div>` : "";
+  const footer = integration?.emailFooterHtml ? `<div class="email-footer">${integration.emailFooterHtml}</div>` : "";
+  return `${header}${html}${footer}`;
+}
+
 export async function notifyTicketCreated(
   ctx: MutationCtx,
   args: {
@@ -27,7 +34,8 @@ export async function notifyTicketCreated(
     ticketId: args.ticketId,
     email: to,
   });
-  await ctx.scheduler.runAfter(0, internal.email.send, { to, ...mail });
+  const html = await wrapEmailHtml(ctx, args.tenantId, mail.html);
+  await ctx.scheduler.runAfter(0, internal.email.send, { to, subject: mail.subject, html });
 }
 
 export async function notifyTicketReply(
@@ -51,7 +59,8 @@ export async function notifyTicketReply(
     ticketId: args.ticketId,
     email: to,
   });
-  await ctx.scheduler.runAfter(0, internal.email.send, { to, ...mail });
+  const html = await wrapEmailHtml(ctx, args.tenantId, mail.html);
+  await ctx.scheduler.runAfter(0, internal.email.send, { to, subject: mail.subject, html });
 }
 
 export async function notifyTicketStatusChange(
@@ -75,5 +84,6 @@ export async function notifyTicketStatusChange(
     ticketId: args.ticketId,
     email: to,
   });
-  await ctx.scheduler.runAfter(0, internal.email.send, { to, ...mail });
+  const html = await wrapEmailHtml(ctx, args.tenantId, mail.html);
+  await ctx.scheduler.runAfter(0, internal.email.send, { to, subject: mail.subject, html });
 }

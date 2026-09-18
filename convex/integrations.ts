@@ -1,5 +1,6 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { action, internalQuery, mutation, query } from "./_generated/server";
+import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
 import { requireMember, requirePermission, writeAudit } from "./lib/auth";
@@ -337,6 +338,55 @@ export const removeRule = mutation({
     if (!rule || rule.tenantId !== args.tenantId) return null;
     await ctx.db.delete(args.ruleId);
     return null;
+  },
+});
+
+export const getIntegrationsInternal = internalQuery({
+  args: { tenantId: v.id("tenants") },
+  returns: v.array(v.object({
+    shopifyStoreDomain: v.union(v.string(), v.null()),
+    shopifyAccessToken: v.union(v.string(), v.null()),
+  })),
+  handler: async (ctx, args) => {
+    const rows = await ctx.db.query("integrationSettings").withIndex("by_tenant", (q) => q.eq("tenantId", args.tenantId)).take(10);
+    return rows.map((r) => ({
+      shopifyStoreDomain: r.shopifyStoreDomain ?? null,
+      shopifyAccessToken: r.shopifyAccessToken ?? null,
+    }));
+  },
+});
+
+export const fetchShopifyOrders = action({
+  args: { tenantId: v.id("tenants"), email: v.string() },
+  returns: v.array(v.object({
+    id: v.string(),
+    name: v.string(),
+    totalPrice: v.string(),
+    fulfillmentStatus: v.string(),
+    createdAt: v.string(),
+  })),
+  handler: async (ctx, args) => {
+    const rows = await ctx.runQuery(internal.integrations.getIntegrationsInternal, { tenantId: args.tenantId });
+    const integration = rows.find((r) => r.shopifyStoreDomain && r.shopifyAccessToken);
+    if (!integration?.shopifyStoreDomain || !integration?.shopifyAccessToken) {
+      return [];
+    }
+    try {
+      const res = await fetch(`https://${integration.shopifyStoreDomain}/admin/api/2024-01/orders.json?email=${encodeURIComponent(args.email)}`, {
+        headers: { "X-Shopify-Access-Token": integration.shopifyAccessToken },
+      });
+      if (!res.ok) return [];
+      const data = await res.json() as { orders?: Array<{ id: number; name: string; total_price: string; fulfillment_status: string | null; created_at: string }> };
+      return (data.orders ?? []).map((o) => ({
+        id: String(o.id),
+        name: o.name || `#${o.id}`,
+        totalPrice: o.total_price || "0.00",
+        fulfillmentStatus: o.fulfillment_status || "Unfulfilled",
+        createdAt: o.created_at,
+      }));
+    } catch {
+      return [];
+    }
   },
 });
 

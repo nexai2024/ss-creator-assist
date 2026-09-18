@@ -412,8 +412,8 @@ export const widgetConfig = query({
         id: campaign._id, 
         title: campaign.title, 
         body: campaign.body,
-        triggerUrl: campaign.triggerUrl,
-        triggerTimeSeconds: campaign.triggerTimeSeconds 
+        triggerUrl: undefined,
+        triggerTimeSeconds: undefined,
       } : null,
     };
   },
